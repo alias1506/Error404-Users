@@ -39,22 +39,89 @@ export default function Challenge() {
   const [result, setResult] = useState(null);
   const [selectedLang, setSelectedLang] = useState('c');
   const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
+  const [isReadOnly, setIsReadOnly] = useState(false);
+  const timeUpNotified = useRef(false);
 
   useEffect(() => {
+    let isMounted = true;
+    
     const fetchQuestion = async () => {
       try {
-        const res = await api.get(`/questions/${slug}`);
-        setQuestion(res.data);
+        const [qRes, rRes] = await Promise.all([
+          api.get(`/questions/${slug}`),
+          api.get('/rounds')
+        ]);
+        
+        if (!isMounted) return;
+        
+        const questionData = qRes.data;
+        const rounds = rRes.data;
+        const activeRound = rounds.find(r => r.status === 'Active');
+        
+        let timeOver = false;
+        if (activeRound) {
+          const startTime = new Date(activeRound.updatedAt).getTime();
+          const durationMs = activeRound.duration * 60 * 1000;
+          if (Date.now() >= startTime + durationMs) timeOver = true;
+        }
+        
+        const questionRoundId = questionData.roundId?._id || questionData.roundId;
+        
+        if (!activeRound || questionRoundId !== activeRound._id) {
+          Toast.fire({ icon: 'error', title: 'This challenge is not currently active.' });
+          navigate('/dashboard');
+          return;
+        }
+
+        if (timeOver) {
+          setIsReadOnly(true);
+          timeUpNotified.current = true;
+        }
+
+        setQuestion(questionData);
         const savedCode = localStorage.getItem(`error404_code_${slug}_c`);
         setCode(savedCode || LANGUAGE_TEMPLATES['c']);
       } catch (error) {
-        Toast.fire({ icon: 'error', title: 'Failed to load challenge' });
-        navigate('/dashboard');
+        if (isMounted) {
+          Toast.fire({ icon: 'error', title: 'Failed to load challenge' });
+          navigate('/dashboard');
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
+    
     fetchQuestion();
+    
+    // Also set up a polling interval to lock them out if the round ends while they are coding!
+    const pollInterval = setInterval(async () => {
+      try {
+        const res = await api.get('/rounds');
+        const activeRound = res.data.find(r => r.status === 'Active');
+        
+        let timeOver = false;
+        if (activeRound) {
+          const startTime = new Date(activeRound.updatedAt).getTime();
+          const durationMs = activeRound.duration * 60 * 1000;
+          if (Date.now() >= startTime + durationMs) timeOver = true;
+        }
+
+        if (!activeRound || timeOver) {
+          if (isMounted && !timeUpNotified.current) {
+            setIsReadOnly(true);
+            timeUpNotified.current = true;
+            Toast.fire({ icon: 'info', title: 'Time is up! Editor is now locked.' });
+          }
+        }
+      } catch (e) {
+        // ignore errors on polling
+      }
+    }, 1000);
+    
+    return () => {
+      isMounted = false;
+      clearInterval(pollInterval);
+    };
   }, [slug, navigate]);
 
   const handleSave = () => {
@@ -183,7 +250,8 @@ export default function Challenge() {
                 <div className="flex items-center gap-2">
                   <button 
                     onClick={handleReset}
-                    className="flex items-center gap-2 bg-zinc-800/50 text-zinc-400 px-4 py-2 rounded-lg font-bold hover:bg-zinc-700 hover:text-white transition-all text-sm shadow-sm border border-zinc-700/50"
+                    disabled={isReadOnly}
+                    className="flex items-center gap-2 bg-zinc-800/50 text-zinc-400 px-4 py-2 rounded-lg font-bold hover:bg-zinc-700 hover:text-white transition-all text-sm shadow-sm border border-zinc-700/50 disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Reset to default template"
                   >
                     <RotateCcw size={16} />
@@ -191,15 +259,16 @@ export default function Challenge() {
                   </button>
                   <button 
                     onClick={handleSave}
-                    className="flex items-center gap-2 bg-zinc-800 text-zinc-300 px-4 py-2 rounded-lg font-bold hover:bg-zinc-700 hover:text-white transition-all text-sm shadow-sm border border-zinc-700"
+                    disabled={isReadOnly}
+                    className="flex items-center gap-2 bg-zinc-800 text-zinc-300 px-4 py-2 rounded-lg font-bold hover:bg-zinc-700 hover:text-white transition-all text-sm shadow-sm border border-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Save size={16} /> 
                     SAVE
                   </button>
                   <button 
                     onClick={handleSubmit}
-                    disabled={submitting}
-                    className="flex items-center gap-2 bg-white text-black px-5 py-2 rounded-lg font-bold hover:bg-gray-200 transition-all disabled:opacity-50 text-sm shadow-sm"
+                    disabled={submitting || isReadOnly}
+                    className="flex items-center gap-2 bg-white text-black px-5 py-2 rounded-lg font-bold hover:bg-gray-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm shadow-sm"
                   >
                     {submitting ? <Play size={16} className="animate-spin" /> : <Zap size={16} />} 
                     {submitting ? 'EXECUTING...' : 'RUN CODE'}
@@ -285,6 +354,7 @@ export default function Challenge() {
                 monaco.editor.setModelMarkers(editor.getModel(), 'owner', []);
               }}
               options={{
+                readOnly: isReadOnly,
                 minimap: { enabled: false },
                 fontSize: 14,
                 fontFamily: "'Fira Code', 'JetBrains Mono', monospace",
