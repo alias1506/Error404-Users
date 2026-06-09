@@ -1,0 +1,13 @@
+{
+  "name": "error404",
+  "version": "1.0.0",
+  "description": "ERROR404 Gamified Debugging Platform",
+  "scripts": {
+    "client": "npm run dev --prefix client",
+    "server": "npm run dev --prefix server",
+    "dev": "node scripts/clear-ports.js && concurrently \"npm run client\" \"npm run server\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

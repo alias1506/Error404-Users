@@ -1,0 +1,151 @@
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import api from '../services/api';
+import Navbar from '../components/layout/Navbar';
+import { motion } from 'framer-motion';
+import { Code, CheckCircle, Zap } from 'lucide-react';
+import useAuthStore from '../store/authStore';
+
+export default function Dashboard() {
+  const [profile, setProfile] = useState(null);
+  const [questions, setQuestions] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [profileRes, questionsRes] = await Promise.all([
+          api.get('/auth/profile'),
+          api.get('/questions')
+        ]);
+        setProfile(profileRes.data);
+        setQuestions(questionsRes.data);
+      } catch (error) {
+        console.error('Failed to fetch dashboard data', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  if (loading) {
+    return <div className="min-h-screen bg-black flex items-center justify-center text-white font-bold text-2xl">LOADING SYSTEM DATA...</div>;
+  }
+
+  if (!profile) {
+    return (
+      <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white p-6 text-center">
+        <h2 className="text-3xl font-bold text-red-500 mb-4">SYSTEM ERROR</h2>
+        <p className="text-gray-400 font-mono mb-6">Failed to load agent profile data. The server might be unreachable or your session is invalid.</p>
+        <button 
+          onClick={() => { useAuthStore.getState().logout(); window.location.href = '/login'; }}
+          className="px-6 py-2 border border-zinc-700 hover:bg-white hover:text-black transition-colors rounded font-bold"
+        >
+          RETURN TO LOGIN
+        </button>
+      </div>
+    );
+  }
+
+  // Calculate progress to next level
+  const xpForCurrentLevel = Math.pow(profile.level - 1, 2) * 100;
+  const xpForNextLevel = Math.pow(profile.level, 2) * 100;
+  const progressPercent = Math.min(100, Math.max(0, ((profile.xp - xpForCurrentLevel) / (xpForNextLevel - xpForCurrentLevel)) * 100));
+
+  return (
+    <div className="min-h-screen bg-black flex flex-col">
+      <Navbar />
+      
+      <main className="flex-1 p-6 md:p-10 max-w-7xl mx-auto w-full grid grid-cols-1 lg:grid-cols-3 gap-8">
+        
+        {/* Left Column - Stats / Profile */}
+        <div className="lg:col-span-1">
+          <motion.div 
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="glass-panel p-6 rounded-xl border-l-4 border-l-white sticky top-24"
+          >
+            <h2 className="text-gray-400 font-mono text-sm mb-1">AGENT PROFILE</h2>
+            <h1 className="text-3xl font-bold text-white mb-6">{profile.username}</h1>
+            
+            <div className="flex justify-between items-end mb-2">
+              <span className="text-white font-bold text-xl">LEVEL {profile.level}</span>
+              <span className="text-gray-400 font-mono text-sm">{profile.xp} / {xpForNextLevel} XP</span>
+            </div>
+            
+            <div className="w-full bg-zinc-900 rounded-full h-3 mb-6 border border-zinc-800">
+              <div className="bg-white h-2.5 rounded-full" style={{ width: `${progressPercent}%` }}></div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-zinc-900 p-4 rounded border border-zinc-800 text-center flex flex-col items-center justify-center">
+                <Zap className="text-white mb-2" size={24} />
+                <div className="text-2xl font-bold text-white">{profile.streak}</div>
+                <div className="text-xs text-gray-400 font-mono">DAY STREAK</div>
+              </div>
+              <div className="bg-zinc-900 p-4 rounded border border-zinc-800 text-center flex flex-col items-center justify-center">
+                <CheckCircle className="text-gray-400 mb-2" size={24} />
+                <div className="text-2xl font-bold text-white">{profile.solvedQuestions?.length || 0}</div>
+                <div className="text-xs text-gray-400 font-mono">SOLVED</div>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+
+        {/* Right Column - Challenges */}
+        <div className="lg:col-span-2">
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+          >
+            <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2">
+              <Code className="text-white" /> ACTIVE CHALLENGES
+            </h2>
+
+            {/* Changed from space-y-4 to grid for 2-column layout matching the blueprint */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {questions.map((q) => {
+                const isSolved = profile.solvedQuestions.some(sq => sq._id === q._id || sq === q._id);
+                return (
+                  <Link 
+                    key={q._id} 
+                    to={`/challenge/${q.slug}`}
+                    className={`block glass-panel p-5 rounded-lg border transition-all h-full flex flex-col justify-between ${isSolved ? 'border-zinc-700' : 'border-zinc-800 hover:border-gray-500'}`}
+                  >
+                    <div>
+                      <h3 className={`text-xl font-bold ${isSolved ? 'text-gray-500 line-through decoration-red-500' : 'text-white'}`}>{q.title.replace(/\s*\(.*?\)\s*$/, '')}</h3>
+                      <div className="flex flex-wrap items-center gap-2 mt-3 mb-4">
+                        <span className={`text-xs font-mono px-2 py-1 rounded bg-zinc-800 text-gray-300`}>
+                          {q.difficulty}
+                        </span>
+                        <span className="text-gray-400 font-mono text-xs">+{q.xpReward} XP</span>
+                      </div>
+                    </div>
+                    
+                    <div className="mt-auto flex justify-end">
+                      {isSolved ? (
+                        <CheckCircle className="text-emerald-500" size={28} />
+                      ) : (
+                        <button className="px-4 py-2 border border-zinc-600 text-white rounded font-mono font-bold text-sm hover:bg-white hover:text-black transition-colors w-full sm:w-auto">
+                          SOLVE IT
+                        </button>
+                      )}
+                    </div>
+                  </Link>
+                );
+              })}
+              
+              {questions.length === 0 && (
+                <div className="col-span-1 md:col-span-2 text-center text-gray-500 font-mono py-10 border border-dashed border-gray-700 rounded-lg">
+                  NO CHALLENGES AVAILABLE IN DATABASE
+                </div>
+              )}
+            </div>
+          </motion.div>
+        </div>
+      </main>
+    </div>
+  );
+}
