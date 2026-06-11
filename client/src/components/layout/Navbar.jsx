@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import useAuthStore from '../../store/authStore';
 import { Terminal, LogOut, User as UserIcon, Trophy, Timer } from 'lucide-react';
 import api from '../../services/api';
+import { io } from 'socket.io-client';
 
 export default function Navbar() {
   const { user, logout } = useAuthStore();
@@ -11,6 +12,7 @@ export default function Navbar() {
   const [timeLeft, setTimeLeft] = useState('00:00');
   const [roundName, setRoundName] = useState('');
   const [timerStatus, setTimerStatus] = useState('inactive');
+  const [timerColor, setTimerColor] = useState('#9ca3af'); // Default text-gray-400
   const endTimeRef = useRef(null);
   const durationRef = useRef(null);
 
@@ -34,6 +36,7 @@ export default function Navbar() {
           setTimeLeft('00:00');
           setRoundName('');
           setTimerStatus('inactive');
+          setTimerColor('#9ca3af');
         }
       } catch (err) {
         console.error('Failed to fetch rounds for timer', err);
@@ -41,7 +44,16 @@ export default function Navbar() {
     };
     
     fetchRounds();
-    const pollInterval = setInterval(fetchRounds, 1000); // Poll every 1s
+    
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5005/api';
+    const socketUrl = apiUrl.replace('/api', '');
+    const socket = io(socketUrl, {
+      transports: ['websocket', 'polling']
+    });
+
+    socket.on('round-updated', () => {
+      fetchRounds();
+    });
     
     const timerInterval = setInterval(() => {
       if (endTimeRef.current && durationRef.current) {
@@ -49,6 +61,7 @@ export default function Navbar() {
         if (diff <= 0) {
           setTimeLeft('00:00');
           setTimerStatus('red');
+          setTimerColor('rgb(239, 68, 68)');
         } else {
           const m = Math.floor((diff / 1000 / 60) % 60);
           const s = Math.floor((diff / 1000) % 60);
@@ -58,21 +71,38 @@ export default function Navbar() {
           formatted += `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
           setTimeLeft(formatted);
 
-          const percent = diff / durationRef.current;
-          if (percent > 0.5) setTimerStatus('green');
-          else if (percent > 0.2) setTimerStatus('yellow');
-          else setTimerStatus('red');
+          const timeProgress = Math.max(0, Math.min(1, 1 - (diff / durationRef.current)));
+          if (timeProgress >= 0.8) {
+            setTimerStatus('red');
+          } else {
+            setTimerStatus('active');
+          }
+
+          let r, g, b;
+          if (timeProgress <= 0.5) {
+            const p = timeProgress / 0.5;
+            r = Math.round(52 + (251 - 52) * p);
+            g = Math.round(211 + (191 - 211) * p);
+            b = Math.round(153 + (36 - 153) * p);
+          } else {
+            const p = (timeProgress - 0.5) / 0.5;
+            r = Math.round(251 + (239 - 251) * p);
+            g = Math.round(191 + (68 - 191) * p);
+            b = Math.round(36 + (68 - 36) * p);
+          }
+          setTimerColor(`rgb(${r}, ${g}, ${b})`);
         }
       } else {
         setTimeLeft('00:00');
         setTimerStatus('inactive');
+        setTimerColor('#9ca3af');
       }
     }, 1000);
     
     return () => {
       isMounted = false;
-      clearInterval(pollInterval);
       clearInterval(timerInterval);
+      socket.disconnect();
     };
   }, []);
 
@@ -89,10 +119,6 @@ export default function Navbar() {
     navigate('/');
   };
 
-  let timerColorClass = "text-gray-400";
-  if (timerStatus === 'green') timerColorClass = "text-emerald-400";
-  else if (timerStatus === 'yellow') timerColorClass = "text-amber-400";
-  else if (timerStatus === 'red') timerColorClass = "text-red-500";
 
   return (
     <nav className="glass-panel sticky top-0 z-50 px-6 py-4 flex justify-between items-center border-b border-zinc-800">
@@ -102,7 +128,10 @@ export default function Navbar() {
       </Link>
       
       <div className="flex items-center gap-2 md:gap-6">
-        <div className={`flex items-center gap-2 px-3 py-2 font-mono text-sm transition-colors ${timerColorClass}`}>
+        <div 
+          className="flex items-center gap-2 px-3 py-2 font-mono text-sm transition-colors duration-1000"
+          style={{ color: timerColor }}
+        >
           <Timer size={16} className={roundName && timerStatus === 'red' ? "animate-pulse" : (roundName ? "" : "opacity-50")} />
           <span className="font-bold hidden sm:inline">{roundName ? `TIME LEFT: ${timeLeft}` : timeLeft}</span>
           <span className="font-bold sm:hidden">{timeLeft}</span>

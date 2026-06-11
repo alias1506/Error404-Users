@@ -1,7 +1,7 @@
 const Submission = require('../models/Submission');
 const Question = require('../models/Question');
 const User = require('../models/User');
-const { executeCode } = require('../services/pistonService');
+const { executeCode } = require('../services/judge0Service');
 const { calculateLevel } = require('../utils/xpCalculator');
 
 // Helper to delay for polling
@@ -12,7 +12,7 @@ const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 // @access  Private
 const submitQuestion = async (req, res, next) => {
   try {
-    const { sourceCode, language } = req.body;
+    const { sourceCode, language, isSaveOnly, isRunOnly } = req.body;
     const questionId = req.params.questionId;
     
     const question = await Question.findById(questionId);
@@ -24,13 +24,32 @@ const submitQuestion = async (req, res, next) => {
     const { hiddenTestCases, xpReward } = question;
     const executionLang = language || question.language;
 
+    if (isSaveOnly) {
+      const submission = await Submission.create({
+        user: req.user._id,
+        question: questionId,
+        codeSubmitted: sourceCode,
+        language: executionLang,
+        verdict: 'Pending',
+        type: 'Save',
+        executionTime: 0,
+        memoryUsage: 0,
+        errorMessage: null
+      });
+      return res.status(201).json({
+        submissionId: submission._id,
+        verdict: 'Saved',
+        message: 'Code saved successfully'
+      });
+    }
+
     // For simplicity, we just evaluate the first hidden test case. 
     // In a full prod system, we would batch them or loop through all.
-    const testCase = hiddenTestCases[0];
-    const expectedOutput = testCase.expectedOutput;
-    const expectedInput = testCase.input || '';
+    const testCase = (hiddenTestCases && hiddenTestCases.length > 0) ? hiddenTestCases[0] : null;
+    const expectedOutput = testCase ? testCase.expectedOutput : (question.expectedOutput || '');
+    const expectedInput = testCase ? (testCase.input || '') : (question.input || '');
 
-    // 1. Send to Piston (Synchronous execution) or Fallback Simulator
+    // 1. Send to Judge0 (Synchronous execution) or Fallback Simulator
     const { data: result, executionTimeSeconds } = await executeCode(sourceCode, executionLang, expectedInput, expectedOutput);
 
     // 2. Determine Verdict
@@ -54,6 +73,17 @@ const submitQuestion = async (req, res, next) => {
       }
     }
 
+    if (isRunOnly) {
+      return res.status(200).json({
+        verdict,
+        executionTime: executionTimeSeconds,
+        memoryUsage: 0,
+        errorMessage,
+        actualOutput: result.run && result.run.stdout ? result.run.stdout.trim() : '',
+        expectedOutput: expectedOutput ? expectedOutput.trim() : ''
+      });
+    }
+
     // 3. Save Submission
     const submission = await Submission.create({
       user: req.user._id,
@@ -61,6 +91,7 @@ const submitQuestion = async (req, res, next) => {
       codeSubmitted: sourceCode,
       language: executionLang,
       verdict,
+      type: 'Submit',
       executionTime: executionTimeSeconds,
       memoryUsage: 0,
       errorMessage

@@ -3,10 +3,11 @@ import { useParams, useNavigate } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
 import Navbar from '../components/layout/Navbar';
 import api from '../services/api';
-import { Play, CheckSquare, AlertTriangle, ArrowLeft, Terminal as TerminalIcon, FileCode2, Cpu, Zap, Activity, Loader2, ChevronDown, Save, RotateCcw } from 'lucide-react';
+import { Play, CheckSquare, AlertTriangle, ArrowLeft, Terminal as TerminalIcon, FileCode2, Cpu, Zap, Activity, Loader2, ChevronDown, Save, RotateCcw, Send } from 'lucide-react';
 import { motion } from 'framer-motion';
 import useAuthStore from '../store/authStore';
 import Swal from 'sweetalert2';
+import { io } from 'socket.io-client';
 
 const Toast = Swal.mixin({
   toast: true,
@@ -36,11 +37,25 @@ export default function Challenge() {
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isRunning, setIsRunning] = useState(false);
   const [result, setResult] = useState(null);
   const [selectedLang, setSelectedLang] = useState('c');
+  const [lastSavedCode, setLastSavedCode] = useState('');
   const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
   const [isReadOnly, setIsReadOnly] = useState(false);
+  const [hasSubmittedMode, setHasSubmittedMode] = useState(false);
+  const [userSubmissions, setUserSubmissions] = useState([]);
   const timeUpNotified = useRef(false);
+  const codeRef = useRef(code);
+  const langRef = useRef(selectedLang);
+  const questionRef = useRef(question);
+
+  useEffect(() => {
+    codeRef.current = code;
+    langRef.current = selectedLang;
+    questionRef.current = question;
+  }, [code, selectedLang, question]);
 
   useEffect(() => {
     let isMounted = true;
@@ -79,8 +94,39 @@ export default function Challenge() {
         }
 
         setQuestion(questionData);
-        const savedCode = localStorage.getItem(`error404_code_${slug}_c`);
-        setCode(savedCode || LANGUAGE_TEMPLATES['c']);
+        
+        let alreadySubmittedCode = null;
+        let submittedLanguage = 'c';
+        
+        try {
+          const subRes = await api.get('/submissions/my');
+          if (isMounted) {
+            setUserSubmissions(subRes.data);
+            const alreadySubmitted = subRes.data.find(s => 
+              (s.question?._id === questionData._id || s.question?.slug === slug) && 
+              s.type === 'Submit'
+            );
+            if (alreadySubmitted) {
+              setIsReadOnly(true);
+              setHasSubmittedMode(true);
+              alreadySubmittedCode = alreadySubmitted.codeSubmitted;
+              if (alreadySubmitted.language) submittedLanguage = alreadySubmitted.language;
+            }
+          }
+        } catch (e) {
+          console.error("Failed to fetch user submissions", e);
+        }
+
+        if (alreadySubmittedCode) {
+          setSelectedLang(submittedLanguage);
+          setCode(alreadySubmittedCode);
+          setLastSavedCode(alreadySubmittedCode);
+        } else {
+          const langObj = questionData.codes?.find(c => c.language === 'c');
+          const initialCode = langObj ? langObj.buggyCode : LANGUAGE_TEMPLATES['c'];
+          setCode(initialCode);
+          setLastSavedCode(initialCode);
+        }
       } catch (error) {
         if (isMounted) {
           Toast.fire({ icon: 'error', title: 'Failed to load challenge' });
@@ -92,41 +138,107 @@ export default function Challenge() {
     };
     
     fetchQuestion();
-    
-    // Also set up a polling interval to lock them out if the round ends while they are coding!
-    const pollInterval = setInterval(async () => {
+    let intervalId = null;
+
+    const checkTime = async () => {
       try {
         const res = await api.get('/rounds');
         const activeRound = res.data.find(r => r.status === 'Active');
         
-        let timeOver = false;
-        if (activeRound) {
-          const startTime = new Date(activeRound.updatedAt).getTime();
-          const durationMs = activeRound.duration * 60 * 1000;
-          if (Date.now() >= startTime + durationMs) timeOver = true;
-        }
-
-        if (!activeRound || timeOver) {
+        if (!activeRound) {
           if (isMounted && !timeUpNotified.current) {
             setIsReadOnly(true);
             timeUpNotified.current = true;
-            Toast.fire({ icon: 'info', title: 'Time is up! Editor is now locked.' });
+            Toast.fire({ icon: 'info', title: 'Round is not active. Editor is locked.' });
           }
+          return;
         }
+
+        const startTime = new Date(activeRound.updatedAt).getTime();
+        const durationMs = activeRound.duration * 60 * 1000;
+
+        const evaluateTime = () => {
+          if (Date.now() >= startTime + durationMs) {
+            if (isMounted && !timeUpNotified.current) {
+              setIsReadOnly(true);
+              timeUpNotified.current = true;
+              
+              const currentCode = codeRef.current;
+              const currentLang = langRef.current;
+              const currentQuestion = questionRef.current;
+              
+              if (currentQuestion && currentCode && currentCode.trim()) {
+                api.post(`/submissions/${currentQuestion._id}`, { sourceCode: currentCode, language: currentLang, isSaveOnly: true })
+                  .then(() => {
+                    Toast.fire({ icon: 'info', title: 'Time is up! Your code has been auto-saved. Editor is locked.' });
+                  })
+                  .catch((err) => {
+                    console.error("Auto-save failed", err);
+                    Toast.fire({ icon: 'warning', title: 'Time is up! Editor locked, but auto-save failed.' });
+                  });
+              } else {
+                Toast.fire({ icon: 'info', title: 'Time is up! Editor is now locked.' });
+              }
+            }
+            if (intervalId) clearInterval(intervalId);
+          } else if (isMounted && timeUpNotified.current) {
+            // In case round was restarted
+            setIsReadOnly(false);
+            timeUpNotified.current = false;
+          }
+        };
+
+        evaluateTime(); // Check immediately
+        
+        if (intervalId) clearInterval(intervalId);
+        intervalId = setInterval(evaluateTime, 1000); // Check every second
+
       } catch (e) {
-        // ignore errors on polling
+        console.error('Failed to process round status', e);
       }
-    }, 1000);
+    };
+
+    checkTime();
+    
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5005/api';
+    const socketUrl = apiUrl.replace('/api', '');
+    const socket = io(socketUrl, {
+      transports: ['websocket', 'polling']
+    });
+
+    socket.on('round-updated', () => {
+      checkTime();
+    });
     
     return () => {
       isMounted = false;
-      clearInterval(pollInterval);
+      if (intervalId) clearInterval(intervalId);
+      socket.disconnect();
     };
   }, [slug, navigate]);
 
-  const handleSave = () => {
-    localStorage.setItem(`error404_code_${slug}_${selectedLang}`, code);
-    Toast.fire({ icon: 'success', title: 'Code saved successfully' });
+  const handleSave = async () => {
+    if (!code.trim()) return Toast.fire({ icon: 'error', title: 'Code cannot be empty' });
+    if (code === lastSavedCode) return;
+
+    setIsSaving(true);
+    try {
+      await api.post(`/submissions/${question._id}`, { sourceCode: code, language: selectedLang, isSaveOnly: true });
+      localStorage.setItem(`error404_code_${slug}_${selectedLang}`, code);
+      
+      // Update the userSubmissions state to reflect this save
+      setUserSubmissions(prev => {
+        const newSave = { question: { _id: question._id }, language: selectedLang, codeSubmitted: code, type: 'Save', createdAt: new Date().toISOString() };
+        return [newSave, ...prev];
+      });
+
+      setLastSavedCode(code);
+      Toast.fire({ icon: 'success', title: 'Code saved to submissions!' });
+    } catch (error) {
+      Toast.fire({ icon: 'error', title: error.response?.data?.message || 'Failed to save code' });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleReset = () => {
@@ -139,29 +251,75 @@ export default function Challenge() {
       cancelButtonColor: '#3f3f46',
       confirmButtonText: 'Yes, reset it!',
       background: '#18181b',
-      color: '#fff'
+      color: '#fff',
+      customClass: {
+        popup: 'rounded-xl border border-zinc-800',
+        confirmButton: 'rounded-lg',
+        cancelButton: 'rounded-lg'
+      }
     }).then((result) => {
       if (result.isConfirmed) {
-        setCode(LANGUAGE_TEMPLATES[selectedLang]);
-        localStorage.removeItem(`error404_code_${slug}_${selectedLang}`);
+        const langObj = question?.codes?.find(c => c.language === selectedLang);
+        const dbBuggyCode = langObj ? langObj.buggyCode : LANGUAGE_TEMPLATES[selectedLang];
+        setCode(dbBuggyCode);
         Toast.fire({ icon: 'success', title: 'Code reset to default' });
       }
     });
   };
 
-  const handleSubmit = async () => {
+  const handleRunCode = async () => {
     if (!code.trim()) return Toast.fire({ icon: 'error', title: 'Code cannot be empty' });
     
-    setSubmitting(true);
+    setIsRunning(true);
     setResult({ status: 'executing' });
     
     try {
-      const res = await api.post(`/submissions/${question._id}`, { sourceCode: code, language: selectedLang });
+      const res = await api.post(`/submissions/${question._id}`, { sourceCode: code, language: selectedLang, isRunOnly: true });
       setResult(res.data);
     } catch (error) {
-      setResult({ verdict: 'Error', errorMessage: error.response?.data?.message || 'Submission failed' });
+      setResult({ verdict: 'Error', errorMessage: error.response?.data?.message || 'Execution failed' });
     } finally {
-      setSubmitting(false);
+      setIsRunning(false);
+    }
+  };
+
+  const performSubmit = () => {
+    Toast.fire({ icon: 'info', title: 'Code submitted! Evaluating in background...' });
+    
+    // Fire and forget submission
+    api.post(`/submissions/${question._id}`, { sourceCode: code, language: selectedLang })
+      .catch(error => console.error("Submission failed", error));
+      
+    navigate('/dashboard');
+  };
+
+  const handleSubmit = () => {
+    if (!code.trim()) return Toast.fire({ icon: 'error', title: 'Code cannot be empty' });
+    
+    if (result && result.verdict === 'Accepted') {
+      performSubmit();
+    } else {
+      Swal.fire({
+        title: 'Submit without passing tests?',
+        text: "You haven't run the code successfully yet. Are you sure you want to submit?",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#10b981', // emerald-500
+        cancelButtonColor: '#3f3f46',
+        confirmButtonText: 'Directly Submit',
+        cancelButtonText: 'Go back and Run',
+        background: '#18181b',
+        color: '#fff',
+        customClass: {
+          popup: 'rounded-xl border border-zinc-800',
+          confirmButton: 'rounded-lg',
+          cancelButton: 'rounded-lg'
+        }
+      }).then((swalResult) => {
+        if (swalResult.isConfirmed) {
+          performSubmit();
+        }
+      });
     }
   };
 
@@ -217,9 +375,10 @@ export default function Challenge() {
                 {/* Custom Language Dropdown */}
                 <div className="relative">
                   <button 
-                    onClick={() => setIsLangDropdownOpen(!isLangDropdownOpen)}
+                    onClick={() => !hasSubmittedMode && setIsLangDropdownOpen(!isLangDropdownOpen)}
                     onBlur={() => setTimeout(() => setIsLangDropdownOpen(false), 200)}
-                    className="flex items-center gap-2 bg-[#050505] border border-zinc-700 text-white font-mono text-xs px-3 py-2 rounded-md outline-none cursor-pointer hover:border-gray-500 transition-colors w-[90px] justify-between shadow-sm"
+                    disabled={hasSubmittedMode}
+                    className={`flex items-center gap-2 bg-[#050505] border border-zinc-700 text-white font-mono text-xs px-3 py-2 rounded-md outline-none transition-colors w-[90px] justify-between shadow-sm ${hasSubmittedMode ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:border-gray-500'}`}
                   >
                     <span>{selectedLang === 'python' ? 'Python' : selectedLang === 'java' ? 'Java' : selectedLang === 'c' ? 'C' : 'C++'}</span>
                     <ChevronDown size={14} className={`text-zinc-500 transition-transform ${isLangDropdownOpen ? 'rotate-180' : ''}`} />
@@ -231,11 +390,13 @@ export default function Challenge() {
                         <div 
                           key={lang}
                           onClick={() => { 
-                            // Auto-save current before switching
-                            localStorage.setItem(`error404_code_${slug}_${selectedLang}`, code);
                             setSelectedLang(lang); 
-                            const savedCode = localStorage.getItem(`error404_code_${slug}_${lang}`);
-                            setCode(savedCode || LANGUAGE_TEMPLATES[lang]);
+                            
+                            const langObj = question?.codes?.find(c => c.language === lang);
+                            const dbBuggyCode = langObj ? langObj.buggyCode : LANGUAGE_TEMPLATES[lang];
+                            
+                            setCode(dbBuggyCode);
+                            setLastSavedCode(dbBuggyCode);
                             setIsLangDropdownOpen(false); 
                           }}
                           className={`px-3 py-2.5 font-mono text-xs cursor-pointer transition-colors ${selectedLang === lang ? 'bg-zinc-700 text-white font-bold' : 'text-zinc-400 hover:bg-zinc-700/50 hover:text-white'}`}
@@ -250,7 +411,7 @@ export default function Challenge() {
                 <div className="flex items-center gap-2">
                   <button 
                     onClick={handleReset}
-                    disabled={isReadOnly}
+                    disabled={isReadOnly || hasSubmittedMode}
                     className="flex items-center gap-2 bg-zinc-800/50 text-zinc-400 px-4 py-2 rounded-lg font-bold hover:bg-zinc-700 hover:text-white transition-all text-sm shadow-sm border border-zinc-700/50 disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Reset to default template"
                   >
@@ -259,19 +420,27 @@ export default function Challenge() {
                   </button>
                   <button 
                     onClick={handleSave}
-                    disabled={isReadOnly}
+                    disabled={isReadOnly || hasSubmittedMode || code === lastSavedCode || isSaving || isRunning || submitting}
                     className="flex items-center gap-2 bg-zinc-800 text-zinc-300 px-4 py-2 rounded-lg font-bold hover:bg-zinc-700 hover:text-white transition-all text-sm shadow-sm border border-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <Save size={16} /> 
+                    {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} 
                     SAVE
                   </button>
                   <button 
-                    onClick={handleSubmit}
-                    disabled={submitting || isReadOnly}
+                    onClick={handleRunCode}
+                    disabled={isRunning || isSaving || submitting || isReadOnly || hasSubmittedMode}
                     className="flex items-center gap-2 bg-white text-black px-5 py-2 rounded-lg font-bold hover:bg-gray-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm shadow-sm"
                   >
-                    {submitting ? <Play size={16} className="animate-spin" /> : <Zap size={16} />} 
-                    {submitting ? 'EXECUTING...' : 'RUN CODE'}
+                    {isRunning ? <Loader2 size={16} className="animate-spin text-black" /> : <Zap size={16} />} 
+                    RUN CODE
+                  </button>
+                  <button 
+                    onClick={handleSubmit}
+                    disabled={submitting || isRunning || isSaving || isReadOnly || hasSubmittedMode}
+                    className="flex items-center gap-2 bg-emerald-600 text-white px-5 py-2 rounded-lg font-bold hover:bg-emerald-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm shadow-sm"
+                  >
+                    {submitting ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />} 
+                    SUBMIT
                   </button>
                 </div>
               </div>
@@ -354,14 +523,14 @@ export default function Challenge() {
                 monaco.editor.setModelMarkers(editor.getModel(), 'owner', []);
               }}
               options={{
-                readOnly: isReadOnly,
                 minimap: { enabled: false },
                 fontSize: 14,
-                fontFamily: "'Fira Code', 'JetBrains Mono', monospace",
-                lineHeight: 24,
-                padding: { top: 16, bottom: 24 },
+                fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+                lineHeight: 1.6,
+                padding: { top: 24, bottom: 24 },
                 scrollBeyondLastLine: false,
-                smoothScrolling: true,
+                readOnly: isReadOnly || hasSubmittedMode,
+                wordWrap: 'on',
                 cursorBlinking: "smooth",
                 cursorSmoothCaretAnimation: "on",
                 formatOnPaste: true,
@@ -422,17 +591,19 @@ export default function Challenge() {
                   <span className="text-blue-400 text-xs font-bold tracking-widest uppercase">Target Output</span>
                 </div>
                 <div className="p-4 font-mono text-sm text-blue-300 whitespace-pre-wrap">
-                  {question?.hiddenTestCases?.[0]?.expectedOutput || <span className="opacity-50 italic">Empty output expected</span>}
+                  {question?.expectedOutput || <span className="opacity-50 italic">Empty output expected</span>}
                 </div>
               </div>
 
-              <div className={`rounded-xl border flex flex-col shadow-lg overflow-hidden ${!result || result.status === 'executing' ? 'border-zinc-800/50 bg-[#0a0a0a]' : result.verdict === 'Accepted' ? 'border-emerald-900/30 bg-[#061e12]' : 'border-red-900/30 bg-[#1e0a0a]'}`}>
-                <div className={`border-b px-4 py-2 flex items-center gap-2 ${!result || result.status === 'executing' ? 'bg-zinc-900/50 border-zinc-800/50' : result.verdict === 'Accepted' ? 'bg-emerald-950/40 border-emerald-900/30' : 'bg-red-950/40 border-red-900/30'}`}>
-                  <div className={`w-2 h-2 rounded-full ${!result || result.status === 'executing' ? 'bg-zinc-600' : result.verdict === 'Accepted' ? 'bg-emerald-500' : 'bg-red-500'}`}></div>
-                  <span className={`text-xs font-bold tracking-widest uppercase ${!result || result.status === 'executing' ? 'text-zinc-500' : result.verdict === 'Accepted' ? 'text-emerald-400' : 'text-red-400'}`}>Your Output</span>
+              <div className={`rounded-xl border flex flex-col shadow-lg overflow-hidden ${hasSubmittedMode || !result || result.status === 'executing' ? 'border-zinc-800/50 bg-[#0a0a0a]' : result.verdict === 'Accepted' ? 'border-emerald-900/30 bg-[#061e12]' : 'border-red-900/30 bg-[#1e0a0a]'}`}>
+                <div className={`border-b px-4 py-2 flex items-center gap-2 ${hasSubmittedMode || !result || result.status === 'executing' ? 'bg-zinc-900/50 border-zinc-800/50' : result.verdict === 'Accepted' ? 'bg-emerald-950/40 border-emerald-900/30' : 'bg-red-950/40 border-red-900/30'}`}>
+                  <div className={`w-2 h-2 rounded-full ${hasSubmittedMode || !result || result.status === 'executing' ? 'bg-zinc-600' : result.verdict === 'Accepted' ? 'bg-emerald-500' : 'bg-red-500'}`}></div>
+                  <span className={`text-xs font-bold tracking-widest uppercase ${hasSubmittedMode || !result || result.status === 'executing' ? 'text-zinc-500' : result.verdict === 'Accepted' ? 'text-emerald-400' : 'text-red-400'}`}>Your Output</span>
                 </div>
-                <div className={`p-4 font-mono text-sm whitespace-pre-wrap ${!result || result.status === 'executing' ? 'text-zinc-600' : result.verdict === 'Accepted' ? 'text-emerald-300' : 'text-red-300'}`}>
-                  {!result ? (
+                <div className={`p-4 font-mono text-sm whitespace-pre-wrap ${hasSubmittedMode || !result || result.status === 'executing' ? 'text-zinc-600' : result.verdict === 'Accepted' ? 'text-emerald-300' : 'text-red-300'}`}>
+                  {hasSubmittedMode ? (
+                    <span className="opacity-50 italic">Code submitted. Output unavailable.</span>
+                  ) : !result ? (
                     <span className="opacity-50 italic">Not executed yet. Run code to see output.</span>
                   ) : result.status === 'executing' ? (
                     <span className="text-emerald-500/80 animate-pulse italic">Executing...</span>
@@ -465,7 +636,12 @@ export default function Challenge() {
             
             {/* Terminal Body */}
             <div className="flex-1 p-5 overflow-y-auto font-mono text-sm custom-scrollbar bg-black/50">
-              {!result ? (
+              {hasSubmittedMode ? (
+                <div className="text-zinc-600 flex flex-col items-center h-full justify-center opacity-50 select-none">
+                  <TerminalIcon size={48} className="mb-4 text-zinc-800" />
+                  <div>&gt; _ CHALLENGE SUBMITTED</div>
+                </div>
+              ) : !result ? (
                 <div className="text-zinc-600 flex flex-col items-center h-full justify-center opacity-50 select-none">
                   <TerminalIcon size={48} className="mb-4 text-zinc-800" />
                   <div>&gt; _ WAITING FOR COMPILE COMMAND</div>

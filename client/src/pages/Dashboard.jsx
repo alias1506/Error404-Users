@@ -5,6 +5,7 @@ import Navbar from '../components/layout/Navbar';
 import { motion } from 'framer-motion';
 import { Code, CheckCircle, Zap, RefreshCw, Hourglass } from 'lucide-react';
 import useAuthStore from '../store/authStore';
+import { io } from 'socket.io-client';
 
 export default function Dashboard() {
   const [profile, setProfile] = useState(null);
@@ -30,15 +31,6 @@ export default function Dashboard() {
     }
   };
 
-  const fetchRoundsOnly = async () => {
-    try {
-      const roundsRes = await api.get('/rounds');
-      setRounds(roundsRes.data);
-    } catch (error) {
-      // Ignore polling errors
-    }
-  };
-
   const handleRefresh = async () => {
     setIsRefreshing(true);
     await fetchDashboardData();
@@ -47,9 +39,32 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchDashboardData(true);
-    const interval = setInterval(fetchRoundsOnly, 1000); // Poll rounds only, every 1s
     
-    return () => clearInterval(interval);
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5005/api';
+    const socketUrl = apiUrl.replace('/api', '');
+    const socket = io(socketUrl, {
+      transports: ['websocket', 'polling']
+    });
+
+    socket.on('round-updated', () => {
+      fetchDashboardData();
+    });
+
+    socket.on('question-updated', () => {
+      fetchDashboardData();
+    });
+
+    socket.on('user-updated', () => {
+      fetchDashboardData();
+    });
+
+    socket.on('submission-updated', () => {
+      fetchDashboardData();
+    });
+    
+    return () => {
+      socket.disconnect();
+    };
   }, []);
 
   if (loading) {
@@ -87,7 +102,7 @@ export default function Dashboard() {
     }
   }
   
-  let noActiveRoundMessage = "WAITING FOR ADMIN TO START ROUND";
+  let noActiveRoundMessage = "ROUND NOT STARTED";
   if (isTimeOver) {
     noActiveRoundMessage = `${activeRound.name.toUpperCase()} OVER`;
     activeRound = undefined;
@@ -95,7 +110,7 @@ export default function Dashboard() {
     const completedRounds = rounds.filter(r => r.status === 'Completed');
     if (completedRounds.length > 0) {
       const lastCompleted = completedRounds[completedRounds.length - 1];
-      noActiveRoundMessage = `${lastCompleted.name.toUpperCase()} COMPLETED`;
+      noActiveRoundMessage = `${lastCompleted.name.toUpperCase()} OVER`;
     }
   }
 
@@ -152,7 +167,7 @@ export default function Dashboard() {
           >
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-                <Code className="text-white" /> {activeRound ? `ACTIVE CHALLENGES - ${activeRound.name.toUpperCase()}` : "CHALLENGES"}
+                <Code className="text-white" /> {activeRound ? `ONGOING - ${activeRound.name.toUpperCase()}` : "CHALLENGES"}
               </h2>
               <button 
                 onClick={handleRefresh}
