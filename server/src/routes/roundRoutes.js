@@ -3,8 +3,10 @@ const {
   getRounds,
   createRound,
   updateRound,
-  deleteRound
+  deleteRound,
+  startRound
 } = require('../controllers/roundController');
+const { protect } = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
@@ -15,5 +17,7 @@ router.route('/')
 router.route('/:id')
   .put(updateRound)
   .delete(deleteRound);
+
+router.post('/:id/start', protect, startRound);
 
 module.exports = router;

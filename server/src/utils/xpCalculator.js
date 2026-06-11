@@ -1,6 +1,6 @@
 const calculateLevel = (xp) => {
-  // Simple leveling formula: Level = floor(sqrt(XP / 100)) + 1
-  return Math.floor(Math.sqrt(xp / 100)) + 1;
+  if (xp < 100) return 1;
+  return Math.floor((xp - 100) / 150) + 2;
 };
 
 const getRankTitle = (level) => {

@@ -21,15 +21,39 @@ export default function Navbar() {
     
     const fetchRounds = async () => {
       try {
-        const res = await api.get('/rounds');
+        const [roundsRes, profileRes] = await Promise.all([
+          api.get('/rounds'),
+          api.get('/auth/profile')
+        ]);
         if (!isMounted) return;
-        const currentActive = res.data.find(r => r.status === 'Active');
+        const currentActive = roundsRes.data.find(r => r.status === 'Active');
         if (currentActive) {
-          const startTime = new Date(currentActive.updatedAt).getTime();
-          const durationMs = currentActive.duration * 60 * 1000;
-          endTimeRef.current = startTime + durationMs;
-          durationRef.current = durationMs;
-          setRoundName(currentActive.name);
+          const profile = profileRes.data;
+          let startedRoundData = profile.startedRounds?.find(r => r.roundId === currentActive._id);
+          
+          if (startedRoundData) {
+            const startTime = new Date(startedRoundData.startTime).getTime();
+            const roundUpdatedAt = new Date(currentActive.updatedAt).getTime() - 5000;
+            if (roundUpdatedAt > startTime) {
+               startedRoundData = null;
+            }
+          }
+
+          if (startedRoundData) {
+            const startTime = new Date(startedRoundData.startTime).getTime();
+            const durationMs = currentActive.duration * 60 * 1000;
+            endTimeRef.current = startTime + durationMs;
+            durationRef.current = durationMs;
+            setRoundName(currentActive.name);
+          } else {
+            // Round is active globally but user hasn't started it
+            endTimeRef.current = null;
+            durationRef.current = null;
+            setTimeLeft('00:00');
+            setRoundName('');
+            setTimerStatus('inactive');
+            setTimerColor('#9ca3af');
+          }
         } else {
           endTimeRef.current = null;
           durationRef.current = null;
@@ -54,6 +78,11 @@ export default function Navbar() {
     socket.on('round-updated', () => {
       fetchRounds();
     });
+    
+    const handleRoundStarted = () => {
+      fetchRounds();
+    };
+    window.addEventListener('round-started', handleRoundStarted);
     
     const timerInterval = setInterval(() => {
       if (endTimeRef.current && durationRef.current) {
@@ -102,6 +131,7 @@ export default function Navbar() {
     return () => {
       isMounted = false;
       clearInterval(timerInterval);
+      window.removeEventListener('round-started', handleRoundStarted);
       socket.disconnect();
     };
   }, []);
@@ -145,8 +175,7 @@ export default function Navbar() {
           style={{ color: timerColor }}
         >
           <Timer size={16} className={roundName && timerStatus === 'red' ? "animate-pulse" : (roundName ? "" : "opacity-50")} />
-          <span className="font-bold hidden sm:inline">{roundName ? `TIME LEFT: ${timeLeft}` : timeLeft}</span>
-          <span className="font-bold sm:hidden">{timeLeft}</span>
+          <span className="font-bold">{timeLeft}</span>
         </div>
         
         <div className="hidden sm:block h-6 w-px bg-zinc-800" />

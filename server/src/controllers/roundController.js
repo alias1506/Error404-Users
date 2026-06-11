@@ -1,4 +1,5 @@
 const Round = require('../models/Round');
+const User = require('../models/User');
 
 // @desc    Get all rounds
 // @route   GET /api/rounds
@@ -51,6 +52,14 @@ exports.updateRound = async (req, res, next) => {
       throw new Error('Round not found');
     }
 
+    if (status === 'Active' && round.status !== 'Active') {
+      const User = require('../models/User');
+      await User.updateMany(
+        {},
+        { $pull: { startedRounds: { roundId: round._id } } }
+      );
+    }
+
     round.name = name || round.name;
     round.duration = duration || round.duration;
     round.status = status || round.status;
@@ -80,6 +89,37 @@ exports.deleteRound = async (req, res, next) => {
     await round.deleteOne();
     
     res.status(200).json({ message: 'Round removed' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Start an active round for a user
+// @route   POST /api/rounds/:id/start
+// @access  Private
+exports.startRound = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user._id;
+
+    const round = await Round.findById(id);
+    if (!round || round.status !== 'Active') {
+      res.status(400);
+      throw new Error('Round not active or not found');
+    }
+
+    const user = await User.findById(userId);
+    const alreadyStarted = user.startedRounds.find(r => r.roundId.toString() === id);
+    
+    if (alreadyStarted) {
+      return res.status(200).json(alreadyStarted);
+    }
+
+    const newStart = { roundId: id, startTime: Date.now() };
+    user.startedRounds.push(newStart);
+    await user.save();
+
+    res.status(200).json(newStart);
   } catch (error) {
     next(error);
   }

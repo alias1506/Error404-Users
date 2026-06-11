@@ -31,10 +31,24 @@ export default function Dashboard() {
     }
   };
 
+  const [timeExpired, setTimeExpired] = useState(false);
+
   const handleRefresh = async () => {
     setIsRefreshing(true);
     await fetchDashboardData();
+    setTimeExpired(false);
     setTimeout(() => setIsRefreshing(false), 500); // Small delay for UX
+  };
+
+  const handleStartRound = async (roundId) => {
+    try {
+      setTimeExpired(false);
+      await api.post(`/rounds/${roundId}/start`);
+      await fetchDashboardData();
+      window.dispatchEvent(new Event('round-started'));
+    } catch (err) {
+      console.error('Failed to start round', err);
+    }
   };
 
   useEffect(() => {
@@ -67,6 +81,48 @@ export default function Dashboard() {
     };
   }, []);
 
+  let activeRound = rounds.find(r => r.status === 'Active');
+  let startedRoundData = null;
+  let isTimeOver = false;
+
+  if (activeRound) {
+    startedRoundData = profile?.startedRounds?.find(r => r.roundId === activeRound._id);
+    if (startedRoundData) {
+      const startTime = new Date(startedRoundData.startTime).getTime();
+      // Added a 5 second buffer to account for backend update times
+      const roundUpdatedAt = new Date(activeRound.updatedAt).getTime() - 5000;
+      
+      // If round was reactivated after the user started it, ignore the old start time
+      if (roundUpdatedAt > startTime) {
+        startedRoundData = null;
+      } else {
+        const durationMs = activeRound.duration * 60 * 1000;
+        if (Date.now() >= startTime + durationMs || timeExpired) {
+          isTimeOver = true;
+        }
+      }
+    }
+  }
+
+  useEffect(() => {
+    let interval;
+    if (activeRound && startedRoundData && !isTimeOver) {
+      const startTime = new Date(startedRoundData.startTime).getTime();
+      const durationMs = activeRound.duration * 60 * 1000;
+      
+      const checkTime = () => {
+        if (Date.now() >= startTime + durationMs) {
+           setTimeExpired(true);
+           clearInterval(interval);
+        }
+      };
+      
+      interval = setInterval(checkTime, 1000);
+      checkTime();
+    }
+    return () => clearInterval(interval);
+  }, [activeRound, startedRoundData, isTimeOver]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-black flex flex-col gap-4 items-center justify-center text-white font-bold text-2xl tracking-widest">
@@ -95,22 +151,10 @@ export default function Dashboard() {
   const xpForCurrentLevel = Math.pow(profile.level - 1, 2) * 100;
   const xpForNextLevel = Math.pow(profile.level, 2) * 100;
   const progressPercent = Math.min(100, Math.max(0, ((profile.xp - xpForCurrentLevel) / (xpForNextLevel - xpForCurrentLevel)) * 100));
-
-  let activeRound = rounds.find(r => r.status === 'Active');
-  
-  let isTimeOver = false;
-  if (activeRound) {
-    const startTime = new Date(activeRound.updatedAt).getTime();
-    const durationMs = activeRound.duration * 60 * 1000;
-    if (Date.now() >= startTime + durationMs) {
-      isTimeOver = true;
-    }
-  }
   
   let noActiveRoundMessage = "ROUND NOT STARTED";
   if (isTimeOver) {
     noActiveRoundMessage = `${activeRound.name.toUpperCase()} OVER`;
-    activeRound = undefined;
   } else if (!activeRound && rounds.length > 0) {
     const completedRounds = rounds.filter(r => r.status === 'Completed');
     if (completedRounds.length > 0) {
@@ -172,7 +216,7 @@ export default function Dashboard() {
           >
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-                <Code className="text-white" /> {activeRound ? `ONGOING - ${activeRound.name.toUpperCase()}` : "CHALLENGES"}
+                <Code className="text-white" /> {activeRound && startedRoundData && !isTimeOver ? `ONGOING - ${activeRound.name.toUpperCase()}` : "CHALLENGES"}
               </h2>
               <button 
                 onClick={handleRefresh}
@@ -184,18 +228,22 @@ export default function Dashboard() {
               </button>
             </div>
 
-            {activeRound ? (
+            {activeRound && startedRoundData && !isTimeOver ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {displayQuestions.map((q) => {
                   const isSolved = profile.solvedQuestions.some(sq => sq._id === q._id || sq === q._id);
                   return (
-                    <Link 
+                    <div 
                       key={q._id} 
-                      to={`/challenge/${q.slug}`}
-                      className={`block glass-panel p-5 rounded-lg border transition-all h-full flex flex-col justify-between ${isSolved ? 'border-zinc-700' : 'border-zinc-800 hover:border-gray-500'}`}
+                      className={`relative block glass-panel p-5 rounded-lg border transition-all h-full flex flex-col justify-between ${isSolved ? 'border-zinc-700' : 'border-zinc-800 hover:border-gray-500'}`}
                     >
+                      {isSolved && (
+                        <div className="absolute top-5 right-5 pointer-events-none">
+                          <CheckCircle className="text-emerald-500" size={24} />
+                        </div>
+                      )}
                       <div>
-                        <h3 className={`text-xl font-bold ${isSolved ? 'text-gray-500 line-through decoration-red-500' : 'text-white'}`}>{q.title.replace(/\s*\(.*?\)\s*$/, '')}</h3>
+                        <h3 className={`text-xl font-bold pr-8 ${isSolved ? 'text-gray-500 line-through decoration-red-500' : 'text-white'}`}>{q.title.replace(/\s*\(.*?\)\s*$/, '')}</h3>
                         <div className="flex flex-wrap items-center gap-2 mt-3 mb-4">
                           <span className={`text-xs font-mono px-2 py-1 rounded bg-zinc-800 text-gray-300`}>
                             {q.difficulty}
@@ -205,15 +253,11 @@ export default function Dashboard() {
                       </div>
                       
                       <div className="mt-auto flex justify-end">
-                        {isSolved ? (
-                          <CheckCircle className="text-emerald-500" size={28} />
-                        ) : (
-                          <button className="px-4 py-2 border border-zinc-600 text-white rounded font-mono font-bold text-sm hover:bg-white hover:text-black transition-colors w-full sm:w-auto">
-                            SOLVE IT
-                          </button>
-                        )}
+                        <Link to={`/challenge/${q.slug}`} className="px-4 py-2 border border-zinc-600 text-white rounded font-mono font-bold text-sm hover:bg-white hover:text-black transition-colors w-full sm:w-auto text-center block">
+                          {isSolved ? "VIEW ANSWER" : "SOLVE IT"}
+                        </Link>
                       </div>
-                    </Link>
+                    </div>
                   );
                 })}
                 
@@ -222,6 +266,32 @@ export default function Dashboard() {
                     NO CHALLENGES AVAILABLE FOR THIS ROUND
                   </div>
                 )}
+              </div>
+            ) : activeRound && !startedRoundData && !isTimeOver ? (
+              <div className="relative overflow-hidden flex flex-col items-center justify-center text-center p-12 glass-panel border border-zinc-800 rounded-xl bg-zinc-950/50 min-h-[350px]">
+                <div className="absolute inset-0 bg-brand-500/5 blur-3xl opacity-50 rounded-full"></div>
+                
+                <div className="relative z-10 flex flex-col items-center">
+                  <div className="bg-zinc-900 p-5 rounded-full border border-zinc-800 mb-6 shadow-xl relative">
+                     <div className="absolute inset-0 bg-brand-500/20 blur-md rounded-full animate-pulse"></div>
+                     <Code className="text-white relative z-10 animate-pulse" size={40} strokeWidth={1.5} />
+                  </div>
+                  
+                  <h3 className="text-xl md:text-2xl font-bold text-white mb-3 font-mono tracking-wider">
+                    {activeRound.name.toUpperCase()} IS ACTIVE
+                  </h3>
+                  <div className="w-16 h-1 bg-white/20 rounded-full mb-4"></div>
+                  <p className="text-gray-400 font-mono text-sm max-w-md leading-relaxed mb-8">
+                    You have {activeRound.duration} minutes to complete the challenges. Your personal timer will start as soon as you click the button below. Good luck!
+                  </p>
+                  
+                  <button 
+                    onClick={() => handleStartRound(activeRound._id)}
+                    className="px-8 py-3 bg-white text-black font-bold font-mono rounded hover:bg-gray-200 transition-colors tracking-widest text-lg"
+                  >
+                    START CHALLENGE
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="relative overflow-hidden flex flex-col items-center justify-center text-center p-12 glass-panel border border-zinc-800 rounded-xl bg-zinc-950/50 min-h-[350px]">
@@ -239,7 +309,7 @@ export default function Dashboard() {
                   </h3>
                   <div className="w-16 h-1 bg-white/20 rounded-full mb-4"></div>
                   <p className="text-gray-400 font-mono text-sm max-w-md leading-relaxed">
-                    System is standing by. Prepare yourself for the upcoming challenges. The admin will initiate the sequence shortly.
+                    System is standing by. Prepare yourself for the upcoming challenges. The admin will initiate the sequence shortly. Good luck!
                   </p>
                 </div>
               </div>
