@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import api from '../services/api';
 import Navbar from '../components/layout/Navbar';
 import { motion } from 'framer-motion';
-import { Code, CheckCircle, Zap, RefreshCw, Hourglass } from 'lucide-react';
+import { Code, CheckCircle, Zap, RefreshCw, Hourglass, Loader2 } from 'lucide-react';
 import useAuthStore from '../store/authStore';
 import { io } from 'socket.io-client';
 
@@ -68,7 +68,12 @@ export default function Dashboard() {
   }, []);
 
   if (loading) {
-    return <div className="min-h-screen bg-black flex items-center justify-center text-white font-bold text-2xl">LOADING SYSTEM DATA...</div>;
+    return (
+      <div className="min-h-screen bg-black flex flex-col gap-4 items-center justify-center text-white font-bold text-2xl tracking-widest">
+        <Loader2 size={48} className="animate-spin text-gray-500" />
+        LOADING SYSTEM DATA...
+      </div>
+    );
   }
 
   if (!profile) {

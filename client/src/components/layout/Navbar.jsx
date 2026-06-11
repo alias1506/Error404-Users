@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import useAuthStore from '../../store/authStore';
-import { Terminal, LogOut, User as UserIcon, Trophy, Timer } from 'lucide-react';
+import { Terminal, LogOut, User as UserIcon, Trophy, Timer, AlertTriangle } from 'lucide-react';
 import api from '../../services/api';
 import { io } from 'socket.io-client';
 
@@ -126,8 +126,20 @@ export default function Navbar() {
         <Terminal className="text-white" />
         <span className="font-bold tracking-widest text-xl text-white">ERROR<span className="text-gray-400">404</span></span>
       </Link>
-      
       <div className="flex items-center gap-2 md:gap-6">
+        <div className={`flex items-center gap-2 px-3 py-2 font-mono text-sm rounded-lg transition-colors ${
+          (user?.warnings || 0) === 0 ? 'text-emerald-500' :
+          (user?.warnings || 0) === 1 ? 'text-yellow-500' :
+          (user?.warnings || 0) === 2 ? 'text-orange-500' :
+          'text-red-500'
+        }`}>
+          <AlertTriangle size={16} />
+          <span className="font-bold hidden sm:inline">WARNINGS: {user?.warnings || 0}/3</span>
+          <span className="font-bold sm:hidden">{user?.warnings || 0}/3</span>
+        </div>
+
+        <div className="hidden sm:block h-6 w-px bg-zinc-800" />
+
         <div 
           className="flex items-center gap-2 px-3 py-2 font-mono text-sm transition-colors duration-1000"
           style={{ color: timerColor }}

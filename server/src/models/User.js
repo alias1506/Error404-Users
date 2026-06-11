@@ -37,6 +37,10 @@ const userSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   },
+  warnings: {
+    type: Number,
+    default: 0
+  },
   solvedQuestions: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Question'

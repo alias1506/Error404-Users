@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import Navbar from '../components/layout/Navbar';
 import api from '../services/api';
-import { Trophy } from 'lucide-react';
+import { Trophy, ArrowLeft, Loader2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 
 export default function Leaderboard() {
@@ -23,16 +24,29 @@ export default function Leaderboard() {
   }, []);
 
   if (loading) {
-    return <div className="min-h-screen bg-black flex items-center justify-center text-white font-bold text-2xl">LOADING LEADERBOARD...</div>;
+    return (
+      <div className="min-h-screen bg-black flex flex-col gap-4 items-center justify-center text-white font-bold text-2xl tracking-widest">
+        <Loader2 size={48} className="animate-spin text-gray-500" />
+        LOADING LEADERBOARD...
+      </div>
+    );
   }
 
   return (
     <div className="min-h-screen bg-black flex flex-col">
       <Navbar />
-      <main className="flex-1 p-6 md:p-10 max-w-4xl mx-auto w-full">
-        <div className="flex items-center gap-4 mb-8">
+      <main className="flex-1 p-6 md:p-10 max-w-6xl mx-auto w-full">
+        <div className="mb-6">
+          <Link to="/dashboard" className="inline-flex text-gray-400 hover:text-white items-center gap-2 transition-colors group">
+            <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
+            <span className="font-mono text-sm font-bold tracking-widest">BACK TO DASHBOARD</span>
+          </Link>
+        </div>
+        <div className="flex items-center justify-center gap-4 mb-8">
           <Trophy className="text-white w-10 h-10" />
-          <h1 className="text-4xl font-bold text-white uppercase tracking-widest">Global Rankings</h1>
+          <h1 className="text-4xl font-bold text-white uppercase tracking-widest font-mono">
+            GLOBAL RANKINGS
+          </h1>
         </div>
 
         <div className="glass-panel rounded-xl overflow-hidden border border-zinc-800 shadow-sm">
