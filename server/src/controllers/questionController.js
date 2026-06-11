@@ -19,6 +19,12 @@ const getQuestions = async (req, res, next) => {
 // @access  Private
 const getQuestionBySlug = async (req, res, next) => {
   try {
+    const User = require('../models/User');
+    const user = await User.findById(req.user._id);
+    if (user.warnings >= 3) {
+      return res.status(403).json({ message: 'Disqualified' });
+    }
+
     const question = await Question.findOne({ slug: req.params.slug })
       .select('-correctSolution');
 

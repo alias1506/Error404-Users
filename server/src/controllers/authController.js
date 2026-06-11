@@ -31,6 +31,7 @@ const registerUser = async (req, res, next) => {
         xp: user.xp,
         level: user.level,
         role: user.role,
+        warnings: user.warnings || 0,
         token: generateToken(user._id)
       });
     } else {
@@ -64,6 +65,7 @@ const loginUser = async (req, res, next) => {
         xp: user.xp,
         level: user.level,
         role: user.role,
+        warnings: user.warnings || 0,
         token: generateToken(user._id)
       });
     } else {

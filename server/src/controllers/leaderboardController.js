@@ -7,7 +7,7 @@ const { getRankTitle } = require('../utils/xpCalculator');
 const getGlobalLeaderboard = async (req, res, next) => {
   try {
     const users = await User.find({})
-      .select('username xp level solvedQuestions attemptedQuestions');
+      .select('username xp level solvedQuestions attemptedQuestions warnings');
 
     // Composite ranking:
     //   Score = (xp * 0.5) + (solvedCount * 30 * 0.3) + (attemptCount * 20 * 0.2)
@@ -23,13 +23,19 @@ const getGlobalLeaderboard = async (req, res, next) => {
         username: user.username,
         xp: user.xp,
         level: user.level,
+        warnings: user.warnings || 0,
         rankTitle: getRankTitle(user.level),
         solvedCount,
         attemptCount,
         rankScore: Math.round(rankScore * 100) / 100
       };
     })
-    .sort((a, b) => b.rankScore - a.rankScore)
+    .sort((a, b) => {
+      const aWarnings = a.warnings >= 3 ? 3 : a.warnings;
+      const bWarnings = b.warnings >= 3 ? 3 : b.warnings;
+      if (aWarnings !== bWarnings) return aWarnings - bWarnings;
+      return b.rankScore - a.rankScore;
+    })
     .slice(0, 100);
 
     res.json(leaderboard);

@@ -12,6 +12,7 @@ const questionRoutes = require('./routes/questionRoutes');
 const submissionRoutes = require('./routes/submissionRoutes');
 const leaderboardRoutes = require('./routes/leaderboardRoutes');
 const roundRoutes = require('./routes/roundRoutes');
+const violationRoutes = require('./routes/violationRoutes');
 
 const app = express();
 
@@ -30,6 +31,7 @@ app.use('/api/questions', questionRoutes);
 app.use('/api/submissions', submissionRoutes);
 app.use('/api/leaderboard', leaderboardRoutes);
 app.use('/api/rounds', roundRoutes);
+app.use('/api/violations', violationRoutes);
 
 // Temporary Seeding Endpoint
 // Error Handling middlewares

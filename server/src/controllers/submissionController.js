@@ -15,6 +15,12 @@ const submitQuestion = async (req, res, next) => {
     const { sourceCode, language, isSaveOnly, isRunOnly } = req.body;
     const questionId = req.params.questionId;
     
+    // Check if user is disqualified
+    const currentUser = await User.findById(req.user._id);
+    if (currentUser.warnings >= 3) {
+      return res.status(403).json({ message: 'User is disqualified due to multiple cheating violations.' });
+    }
+
     const question = await Question.findById(questionId);
     if (!question) {
       res.status(404);

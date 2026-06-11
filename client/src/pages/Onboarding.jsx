@@ -40,6 +40,20 @@ const steps = [
     ],
   },
   {
+    icon: Shield,
+    title: 'ANTI-CHEAT TRACKING',
+    subtitle: 'Strict Monitoring Triggers',
+    rules: [
+      'TAB SWITCHING: Leaving the active browser tab will instantly flag your session.',
+      'WINDOW BLUR: Clicking outside the browser window or opening other applications is prohibited.',
+      'CLIPBOARD: Copy, Cut, and Paste functions are strictly disabled during challenges.',
+      'DEVTOOLS: Attempting to open the browser console (F12, Ctrl+Shift+I) will trigger a high-severity alert.',
+      'RIGHT-CLICK: The context menu is disabled. Attempting to force it open is logged.',
+      'KEYBOARD SHORTCUTS: Ctrl+C, Ctrl+V, Ctrl+F, and other standard browser shortcuts are blocked.',
+      'FULLSCREEN: You must remain in fullscreen mode. Pressing ESC to exit will log a violation.'
+    ],
+  },
+  {
     icon: AlertTriangle,
     title: 'CONSEQUENCE MATRIX',
     subtitle: 'Violations & Penalties',
@@ -111,7 +125,7 @@ export default function Onboarding() {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -40 }}
             transition={{ duration: 0.3, ease: 'easeInOut' }}
-            className="glass-panel rounded-xl border border-zinc-800 p-8 min-h-[460px] flex flex-col"
+            className="glass-panel rounded-xl border border-zinc-800 p-8 flex flex-col mb-8"
           >
             {/* Header */}
             <div className="flex items-center gap-4 mb-8">
@@ -137,7 +151,16 @@ export default function Onboarding() {
                   <div className="mt-1 flex-shrink-0 w-5 h-5 rounded border border-zinc-700 bg-zinc-900 flex items-center justify-center text-xs font-mono text-gray-400 group-hover:border-white group-hover:text-white transition-colors">
                     {index + 1}
                   </div>
-                  <p className="text-gray-300 text-sm leading-relaxed">{rule}</p>
+                  <p className="text-gray-300 text-sm leading-relaxed">
+                    {rule.includes(':') ? (
+                      <>
+                        <span className="font-bold text-white tracking-wide">{rule.split(':')[0]}:</span>
+                        {rule.split(':').slice(1).join(':')}
+                      </>
+                    ) : (
+                      rule
+                    )}
+                  </p>
                 </motion.div>
               ))}
             </div>

@@ -3,8 +3,9 @@ import { Link } from 'react-router-dom';
 import api from '../services/api';
 import Navbar from '../components/layout/Navbar';
 import { motion } from 'framer-motion';
-import { Code, CheckCircle, Zap, RefreshCw, Hourglass, Loader2 } from 'lucide-react';
+import { Code, CheckCircle, Zap, RefreshCw, Hourglass, Loader2, ShieldAlert, Terminal as TerminalIcon } from 'lucide-react';
 import useAuthStore from '../store/authStore';
+import { useAntiCheat } from '../context/AntiCheatContext';
 import { io } from 'socket.io-client';
 
 export default function Dashboard() {
@@ -13,6 +14,7 @@ export default function Dashboard() {
   const [rounds, setRounds] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const { isDisqualified } = useAntiCheat();
 
   const fetchDashboardData = async (isInitial = false) => {
     try {
@@ -104,6 +106,7 @@ export default function Dashboard() {
     }
   }
 
+
   useEffect(() => {
     let interval;
     if (activeRound && startedRoundData && !isTimeOver) {
@@ -151,7 +154,7 @@ export default function Dashboard() {
   const xpForCurrentLevel = Math.pow(profile.level - 1, 2) * 100;
   const xpForNextLevel = Math.pow(profile.level, 2) * 100;
   const progressPercent = Math.min(100, Math.max(0, ((profile.xp - xpForCurrentLevel) / (xpForNextLevel - xpForCurrentLevel)) * 100));
-  
+
   let noActiveRoundMessage = "ROUND NOT STARTED";
   if (isTimeOver) {
     noActiveRoundMessage = `${activeRound.name.toUpperCase()} OVER`;
@@ -178,55 +181,87 @@ export default function Dashboard() {
           <motion.div 
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
-            className="glass-panel p-6 rounded-xl border-l-4 border-l-white sticky top-24"
+            className={`glass-panel p-6 rounded-xl border-l-4 sticky top-24 ${isDisqualified ? 'border-l-red-500/50 border-zinc-800' : 'border-l-white'}`}
           >
             <h2 className="text-gray-400 font-mono text-sm mb-1">AGENT PROFILE</h2>
-            <h1 className="text-3xl font-bold text-white mb-6">{profile.username}</h1>
+            <h1 className={`text-3xl font-bold mb-6 ${isDisqualified ? 'text-red-400' : 'text-white'}`}>{profile.username}</h1>
             
             <div className="flex justify-between items-end mb-2">
-              <span className="text-white font-bold text-xl">LEVEL {profile.level}</span>
+              <span className={`font-bold text-xl ${isDisqualified ? 'text-red-400' : 'text-white'}`}>LEVEL {profile.level}</span>
               <span className="text-gray-400 font-mono text-sm">{profile.xp} / {xpForNextLevel} XP</span>
             </div>
             
             <div className="w-full bg-zinc-900 rounded-full h-3 mb-6 border border-zinc-800">
-              <div className="bg-white h-2.5 rounded-full" style={{ width: `${progressPercent}%` }}></div>
+              <div className={`${isDisqualified ? 'bg-red-500/50' : 'bg-white'} h-2.5 rounded-full`} style={{ width: `${progressPercent}%` }}></div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div className="bg-zinc-900 p-4 rounded border border-zinc-800 text-center flex flex-col items-center justify-center">
-                <Zap className="text-white mb-2" size={24} />
-                <div className="text-2xl font-bold text-white">{profile.streak}</div>
+              <div className={`bg-zinc-900 p-4 rounded border text-center flex flex-col items-center justify-center ${isDisqualified ? 'border-red-500/20' : 'border-zinc-800'}`}>
+                <Zap className={`${isDisqualified ? 'text-red-400' : 'text-white'} mb-2`} size={24} />
+                <div className={`text-2xl font-bold ${isDisqualified ? 'text-red-400' : 'text-white'}`}>{profile.streak}</div>
                 <div className="text-xs text-gray-400 font-mono">DAY STREAK</div>
               </div>
-              <div className="bg-zinc-900 p-4 rounded border border-zinc-800 text-center flex flex-col items-center justify-center">
+              <div className={`bg-zinc-900 p-4 rounded border text-center flex flex-col items-center justify-center ${isDisqualified ? 'border-red-500/20' : 'border-zinc-800'}`}>
                 <CheckCircle className="text-gray-400 mb-2" size={24} />
-                <div className="text-2xl font-bold text-white">{profile.solvedQuestions?.length || 0}</div>
+                <div className={`text-2xl font-bold ${isDisqualified ? 'text-red-400' : 'text-white'}`}>{profile.solvedQuestions?.length || 0}</div>
                 <div className="text-xs text-gray-400 font-mono">SOLVED</div>
               </div>
             </div>
           </motion.div>
         </div>
 
-        {/* Right Column - Challenges */}
+        {/* Right Column - Challenges / Disqualified UI */}
         <div className="lg:col-span-2">
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-          >
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-                <Code className="text-white" /> {activeRound && startedRoundData && !isTimeOver ? `ONGOING - ${activeRound.name.toUpperCase()}` : "CHALLENGES"}
-              </h2>
-              <button 
-                onClick={handleRefresh}
-                disabled={isRefreshing}
-                className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold font-mono text-gray-400 hover:text-white border border-zinc-700 hover:border-zinc-500 rounded transition-colors bg-zinc-900 hover:bg-zinc-800 disabled:opacity-50"
-              >
-                <RefreshCw size={14} className={isRefreshing ? "animate-spin" : ""} />
-                REFRESH
-              </button>
-            </div>
+          {isDisqualified ? (
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="glass-panel border border-red-500/20 p-10 rounded-xl flex flex-col items-center text-center shadow-[0_0_30px_rgba(239,68,68,0.05)] relative overflow-hidden"
+            >
+              <div className="absolute top-0 left-0 w-full h-1 bg-red-500/50"></div>
+              
+              <div className="w-20 h-20 bg-zinc-900 rounded-full flex items-center justify-center mb-8 border border-red-500/20">
+                <ShieldAlert size={32} className="text-red-500/80" />
+              </div>
+              
+              <h1 className="text-3xl font-bold text-white mb-3 tracking-widest font-sans">SYSTEM LOCKOUT</h1>
+              <div className="text-red-400 font-mono text-xs tracking-widest mb-8 border border-red-500/20 px-3 py-1 rounded bg-red-500/5">
+                STATUS: DISQUALIFIED
+              </div>
+              
+              <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-lg text-left w-full mb-8">
+                <div className="flex items-center gap-2 text-zinc-500 text-xs mb-4 pb-2 border-b border-zinc-800 font-mono">
+                  <TerminalIcon size={14} /> SECURITY_LOG.txt
+                </div>
+                <p className="text-zinc-400 text-sm leading-relaxed mb-4">
+                  You have triggered multiple critical security violations. The automated monitoring system has permanently locked your session.
+                </p>
+                <ul className="text-zinc-500 text-xs space-y-2 font-mono">
+                  <li className="text-red-500/70">&gt; MAX_WARNINGS_EXCEEDED (3/3)</li>
+                  <li>&gt; CONNECTION_SEVERED</li>
+                  <li>&gt; ACCESS_REVOKED</li>
+                </ul>
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+            >
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+                  <Code className="text-white" /> {activeRound && startedRoundData && !isTimeOver ? `ONGOING - ${activeRound.name.toUpperCase()}` : "CHALLENGES"}
+                </h2>
+                <button 
+                  onClick={handleRefresh}
+                  disabled={isRefreshing}
+                  className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold font-mono text-gray-400 hover:text-white border border-zinc-700 hover:border-zinc-500 rounded transition-colors bg-zinc-900 hover:bg-zinc-800 disabled:opacity-50"
+                >
+                  <RefreshCw size={14} className={isRefreshing ? "animate-spin" : ""} />
+                  REFRESH
+                </button>
+              </div>
 
             {activeRound && startedRoundData && !isTimeOver ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -314,7 +349,8 @@ export default function Dashboard() {
                 </div>
               </div>
             )}
-          </motion.div>
+            </motion.div>
+          )}
         </div>
       </main>
     </div>

@@ -137,6 +137,8 @@ export default function Navbar() {
   }, []);
 
   const handleLogout = async () => {
+    window.isLoggingOut = true;
+    
     // Exit fullscreen if active
     if (document.fullscreenElement) {
       try {
@@ -145,8 +147,16 @@ export default function Navbar() {
         console.error('Error exiting fullscreen:', err);
       }
     }
-    logout();
+    
     navigate('/');
+    
+    setTimeout(() => {
+      logout();
+    }, 10);
+    
+    setTimeout(() => {
+      window.isLoggingOut = false;
+    }, 1000);
   };
 
 
@@ -161,11 +171,17 @@ export default function Navbar() {
           (user?.warnings || 0) === 0 ? 'text-emerald-500' :
           (user?.warnings || 0) === 1 ? 'text-yellow-500' :
           (user?.warnings || 0) === 2 ? 'text-orange-500' :
-          'text-red-500'
+          'text-red-500 bg-red-500/10 border border-red-500/30'
         }`}>
           <AlertTriangle size={16} />
-          <span className="font-bold hidden sm:inline">WARNINGS: {user?.warnings || 0}/3</span>
-          <span className="font-bold sm:hidden">{user?.warnings || 0}/3</span>
+          {(user?.warnings || 0) >= 3 ? (
+             <span className="font-bold tracking-widest">DISQUALIFIED</span>
+          ) : (
+            <>
+              <span className="font-bold hidden sm:inline">WARNINGS: {user?.warnings || 0}/3</span>
+              <span className="font-bold sm:hidden">{user?.warnings || 0}/3</span>
+            </>
+          )}
         </div>
 
         <div className="hidden sm:block h-6 w-px bg-zinc-800" />

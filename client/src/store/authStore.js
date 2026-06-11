@@ -38,6 +38,18 @@ const useAuthStore = create(
         set({ user: null, hasSeenOnboarding: false });
       },
 
+      fetchProfile: async () => {
+        try {
+          const res = await api.get('/auth/profile');
+          const current = useAuthStore.getState().user;
+          if (current && res.data) {
+            set({ user: { ...current, warnings: res.data.warnings || 0 } });
+          }
+        } catch (err) {
+          console.error('Failed to fetch profile', err);
+        }
+      },
+
       setHasSeenOnboarding: (value) => {
         set({ hasSeenOnboarding: value });
       },

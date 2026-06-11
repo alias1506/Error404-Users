@@ -8,6 +8,7 @@ import { motion } from 'framer-motion';
 import useAuthStore from '../store/authStore';
 import Swal from 'sweetalert2';
 import { io } from 'socket.io-client';
+import { useAntiCheat } from '../context/AntiCheatContext';
 
 const Toast = Swal.mixin({
   toast: true,
@@ -32,6 +33,8 @@ const LANGUAGE_TEMPLATES = {
 
 export default function Challenge() {
   const { slug } = useParams();
+  const { user } = useAuthStore();
+  const { isDisqualified } = useAntiCheat();
   const navigate = useNavigate();
   const [question, setQuestion] = useState(null);
   const [code, setCode] = useState('');
@@ -56,6 +59,12 @@ export default function Challenge() {
     langRef.current = selectedLang;
     questionRef.current = question;
   }, [code, selectedLang, question]);
+
+  useEffect(() => {
+    if (isDisqualified) {
+      navigate('/dashboard');
+    }
+  }, [isDisqualified, navigate]);
 
   useEffect(() => {
     let isMounted = true;

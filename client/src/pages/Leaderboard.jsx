@@ -52,9 +52,10 @@ export default function Leaderboard() {
         <div className="glass-panel rounded-xl overflow-hidden border border-zinc-800 shadow-sm">
           <div className="grid grid-cols-12 gap-4 p-4 border-b border-gray-700 bg-black/40 font-mono text-gray-400 text-sm">
             <div className="col-span-2 md:col-span-1 text-center">RANK</div>
-            <div className="col-span-4 md:col-span-5">HACKER ALIAS</div>
-            <div className="col-span-3 md:col-span-3 text-center">TITLE</div>
-            <div className="col-span-3 md:col-span-3 text-right pr-4">XP</div>
+            <div className="col-span-3 md:col-span-4">HACKER ALIAS</div>
+            <div className="col-span-3 md:col-span-3 text-center">STATUS</div>
+            <div className="col-span-2 md:col-span-2 text-center">TITLE</div>
+            <div className="col-span-2 md:col-span-2 text-right pr-4">XP</div>
           </div>
 
           <div className="divide-y divide-gray-800">
@@ -69,13 +70,28 @@ export default function Leaderboard() {
                 <div className="col-span-2 md:col-span-1 text-center font-bold text-xl">
                   #{index + 1}
                 </div>
-                <div className="col-span-4 md:col-span-5 font-mono text-lg truncate">
+                <div className="col-span-3 md:col-span-4 font-mono text-lg truncate">
                   {user.username}
                 </div>
-                <div className="col-span-3 md:col-span-3 text-center font-bold text-xs md:text-sm text-gray-400">
+                <div className="col-span-3 md:col-span-3 text-center flex items-center justify-center">
+                  {(user.warnings || 0) >= 3 ? (
+                    <span className="inline-block px-2 py-1 text-[10px] sm:text-xs font-bold tracking-widest text-red-500 bg-red-500/10 border border-red-500/20 rounded">
+                      DISQUALIFIED
+                    </span>
+                  ) : (user.warnings || 0) > 0 ? (
+                    <span className="inline-block px-2 py-1 text-[10px] sm:text-xs font-bold tracking-widest text-yellow-500 bg-yellow-500/10 border border-yellow-500/20 rounded">
+                      {user.warnings}/3 WARNINGS
+                    </span>
+                  ) : (
+                    <span className="inline-block px-2 py-1 text-[10px] sm:text-xs font-bold tracking-widest text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 rounded">
+                      ACTIVE
+                    </span>
+                  )}
+                </div>
+                <div className="col-span-2 md:col-span-2 text-center font-bold text-xs md:text-sm text-gray-400">
                   {user.rankTitle}
                 </div>
-                <div className="col-span-3 md:col-span-3 text-right pr-4 font-mono">
+                <div className="col-span-2 md:col-span-2 text-right pr-4 font-mono">
                   {user.xp}
                 </div>
               </motion.div>
