@@ -137,9 +137,13 @@ export default function Navbar() {
   }, []);
 
   const handleLogout = async () => {
+    // Set flag FIRST so the 500ms polling interval stops forcing fullscreen
     window.isLoggingOut = true;
     
-    // Exit fullscreen if active
+    // Wait for the polling interval to see the flag (interval is 500ms)
+    await new Promise(resolve => setTimeout(resolve, 600));
+    
+    // Now safely exit fullscreen
     if (document.fullscreenElement) {
       try {
         await document.exitFullscreen();
@@ -156,7 +160,7 @@ export default function Navbar() {
     
     setTimeout(() => {
       window.isLoggingOut = false;
-    }, 1000);
+    }, 2000);
   };
 
 
