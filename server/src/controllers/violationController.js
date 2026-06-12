@@ -25,24 +25,36 @@ const reportViolation = async (req, res, next) => {
       });
     }
 
-    // Increment warnings
-    user.warnings += 1;
-    await user.save();
+    const warningNumber = user.warnings + 1;
 
-    // Log the violation
-    const violation = await Violation.create({
+    const updatedUser = await User.findByIdAndUpdate(
+      user._id,
+      { $inc: { warnings: 1 } },
+      { new: true, select: 'warnings' }
+    );
+
+    if (!updatedUser) {
+      res.status(404);
+      throw new Error('User not found');
+    }
+
+    // Log the violation without delaying the warning response
+    const violationPromise = Violation.create({
       user: user._id,
       violationType,
-      warningNumber: user.warnings,
+      warningNumber,
       severity: 'High',
       metadata
     });
 
     res.status(201).json({
       message: 'Violation recorded',
-      warnings: user.warnings,
-      disqualified: user.warnings >= 3,
-      violation
+      warnings: warningNumber,
+      disqualified: warningNumber >= 3
+    });
+
+    violationPromise.catch((error) => {
+      console.error('Failed to log violation:', error);
     });
 
   } catch (error) {

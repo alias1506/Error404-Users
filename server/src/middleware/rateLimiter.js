@@ -5,6 +5,7 @@ const apiLimiter = rateLimit({
   max: 5000, // Limit each IP to 5000 requests per `window` (here, per 15 minutes)
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  skip: (req) => req.path === '/health' || req.originalUrl === '/api/health',
   message: {
     message: 'Too many requests from this IP, please try again after 15 minutes'
   }
