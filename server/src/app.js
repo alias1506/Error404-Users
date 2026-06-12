@@ -16,6 +16,9 @@ const violationRoutes = require('./routes/violationRoutes');
 
 const app = express();
 
+// Render sits behind a proxy, so trust the first hop for client IP detection
+app.set('trust proxy', 1);
+
 // CORS configuration for production
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000').split(',').map(url => url.trim());
 
