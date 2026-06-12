@@ -38,6 +38,15 @@ app.use(cors(corsOptions));
 app.use(express.json());
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
+// Health check for uptime monitoring and keepalive pings
+app.get('/api/health', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Rate limiting applies to all requests
 app.use('/api/', apiLimiter);
 
