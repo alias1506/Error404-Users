@@ -189,15 +189,44 @@ export const AntiCheatProvider = ({ children }) => {
   }, [user, isDisqualified, isExempt, currentPath]);
 
   // ─── Fullscreen enforcement ───
+  const wasInFullscreenRef = useRef(false);
+
   useEffect(() => {
     if (!user || isDisqualified || isExempt) return;
 
     const isFS = () => !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement);
 
-    // Only fire when user was IN fullscreen and then exits (ESC press)
+    const forceFullscreen = () => {
+      if (window.isLoggingOut) return;
+      if (!isFS() && document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      }
+    };
+
+    // Request fullscreen immediately on mount
+    forceFullscreen();
+
+    // Poll every 500ms — if not fullscreen, force it back
+    const interval = setInterval(() => {
+      if (window.isLoggingOut) return;
+      if (!isFS()) {
+        forceFullscreen();
+      }
+    }, 500);
+
+    // Listen for fullscreen exit events to report violations
     const handleFSChange = () => {
       if (!isFS()) {
-        dispatchViolation('FULLSCREEN_EXIT');
+        if (window.isLoggingOut) return;
+
+        // Only report violation if user was previously in fullscreen (real ESC press)
+        if (wasInFullscreenRef.current) {
+          dispatchViolation('FULLSCREEN_EXIT');
+        }
+        wasInFullscreenRef.current = false;
+      } else {
+        // Mark that we are now in fullscreen
+        wasInFullscreenRef.current = true;
       }
     };
 
@@ -205,6 +234,7 @@ export const AntiCheatProvider = ({ children }) => {
     document.addEventListener('webkitfullscreenchange', handleFSChange, true);
 
     return () => {
+      clearInterval(interval);
       document.removeEventListener('fullscreenchange', handleFSChange, true);
       document.removeEventListener('webkitfullscreenchange', handleFSChange, true);
     };
