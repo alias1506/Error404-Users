@@ -24,10 +24,13 @@ const PORT = process.env.PORT || 5005;
 // Create HTTP server
 const server = http.createServer(app);
 
-// Setup Socket.io
+// Setup Socket.io with CORS configuration
+const socketCorsOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000').split(',').map(url => url.trim());
+
 const io = new Server(server, {
   cors: {
-    origin: '*',
+    origin: socketCorsOrigins,
+    credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE']
   }
 });
