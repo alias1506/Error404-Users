@@ -26,14 +26,11 @@ const Toast = Swal.mixin({
 
 // ─── Module-level state (survives React re-renders) ───
 let _reportFn = null;         // set when anti-cheat is active
-let _lastViolationTime = 0;   // cooldown timestamp
 
 function dispatchViolation(type) {
   if (window.isLoggingOut) return;
   
-  const now = Date.now();
-  if (!_reportFn || now - _lastViolationTime < 2000) return;
-  _lastViolationTime = now;
+  if (!_reportFn) return;
   _reportFn(type);
 }
 
@@ -155,6 +152,17 @@ export const AntiCheatProvider = ({ children }) => {
         metadata: { path: window.location.pathname, userAgent: navigator.userAgent }
       });
       const { warnings, disqualified } = res.data;
+
+      const currentUser = useAuthStore.getState().user;
+      if (currentUser) {
+        useAuthStore.setState({
+          user: {
+            ...currentUser,
+            warnings: warnings || 0
+          }
+        });
+      }
+
       if (fetchProfile) await fetchProfile();
       if (disqualified) {
         setIsDisqualified(true);
