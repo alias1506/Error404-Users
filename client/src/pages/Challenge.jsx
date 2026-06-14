@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
 import Navbar from '../components/layout/Navbar';
 import api from '../services/api';
-import { Play, CheckSquare, AlertTriangle, ArrowLeft, Terminal as TerminalIcon, FileCode2, Cpu, Zap, Activity, Loader2, ChevronDown, Save, RotateCcw, Send } from 'lucide-react';
+import { Play, CheckSquare, AlertTriangle, ArrowLeft, Terminal as TerminalIcon, FileCode2, Cpu, Zap, Activity, Loader2, ChevronDown, Save, RotateCcw, Send, Menu } from 'lucide-react';
 import { motion } from 'framer-motion';
 import useAuthStore from '../store/authStore';
 import Swal from 'sweetalert2';
@@ -46,6 +46,7 @@ export default function Challenge() {
   const [selectedLang, setSelectedLang] = useState('c');
   const [lastSavedCode, setLastSavedCode] = useState('');
   const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
+  const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
   const [isReadOnly, setIsReadOnly] = useState(false);
   const [hasSubmittedMode, setHasSubmittedMode] = useState(false);
   const [userSubmissions, setUserSubmissions] = useState([]);
@@ -443,11 +444,12 @@ export default function Challenge() {
                   )}
                 </div>
 
-                <div className="flex items-center gap-2">
+                {/* Desktop Action Buttons - visible on very large screens to prevent squishing */}
+                <div className="hidden 2xl:flex items-center gap-2">
                   <button 
                     onClick={handleReset}
                     disabled={isReadOnly || hasSubmittedMode}
-                    className="flex items-center gap-2 bg-zinc-800/50 text-zinc-400 px-4 py-2 rounded-lg font-bold hover:bg-zinc-700 hover:text-white transition-all text-sm shadow-sm border border-zinc-700/50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex items-center gap-2 bg-zinc-800/50 text-zinc-400 px-4 py-2 rounded-lg font-bold hover:bg-zinc-700 hover:text-white transition-all text-sm shadow-sm border border-zinc-700/50 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                     title="Reset to default template"
                   >
                     <RotateCcw size={16} />
@@ -456,7 +458,7 @@ export default function Challenge() {
                   <button 
                     onClick={handleSave}
                     disabled={isReadOnly || hasSubmittedMode || code === lastSavedCode || isSaving || isRunning || submitting}
-                    className="flex items-center gap-2 bg-zinc-800 text-zinc-300 px-4 py-2 rounded-lg font-bold hover:bg-zinc-700 hover:text-white transition-all text-sm shadow-sm border border-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex items-center gap-2 bg-zinc-800 text-zinc-300 px-4 py-2 rounded-lg font-bold hover:bg-zinc-700 hover:text-white transition-all text-sm shadow-sm border border-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                   >
                     {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} 
                     SAVE
@@ -464,7 +466,7 @@ export default function Challenge() {
                   <button 
                     onClick={handleRunCode}
                     disabled={isRunning || isSaving || submitting || isReadOnly || hasSubmittedMode}
-                    className="flex items-center gap-2 bg-white text-black px-5 py-2 rounded-lg font-bold hover:bg-gray-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm shadow-sm"
+                    className="flex items-center gap-2 bg-white text-black px-5 py-2 rounded-lg font-bold hover:bg-gray-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm shadow-sm whitespace-nowrap"
                   >
                     {isRunning ? <Loader2 size={16} className="animate-spin text-black" /> : <Zap size={16} />} 
                     RUN CODE
@@ -472,11 +474,55 @@ export default function Challenge() {
                   <button 
                     onClick={handleSubmit}
                     disabled={submitting || isRunning || isSaving || isReadOnly || hasSubmittedMode}
-                    className="flex items-center gap-2 bg-emerald-600 text-white px-5 py-2 rounded-lg font-bold hover:bg-emerald-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm shadow-sm"
+                    className="flex items-center gap-2 bg-emerald-600 text-white px-5 py-2 rounded-lg font-bold hover:bg-emerald-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm shadow-sm whitespace-nowrap"
                   >
                     {submitting ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />} 
                     SUBMIT
                   </button>
+                </div>
+
+                {/* Mobile / Tablet Action Hamburger Menu */}
+                <div className="2xl:hidden relative">
+                  <button
+                    onClick={() => setIsActionMenuOpen(!isActionMenuOpen)}
+                    onBlur={() => setTimeout(() => setIsActionMenuOpen(false), 200)}
+                    className="flex items-center justify-center p-2 rounded-md bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-white transition-colors border border-zinc-700"
+                  >
+                    <Menu size={16} />
+                  </button>
+
+                  {isActionMenuOpen && (
+                    <div className="absolute top-full right-0 mt-2 w-40 bg-[#1e1e1e] border border-zinc-600 rounded-md shadow-[0_10px_40px_rgba(0,0,0,0.8)] z-50 overflow-hidden flex flex-col p-1.5 gap-1.5">
+                      <button 
+                        onClick={() => { handleReset(); setIsActionMenuOpen(false); }}
+                        disabled={isReadOnly || hasSubmittedMode}
+                        className="flex items-center gap-2 px-3 py-2 text-xs font-bold text-zinc-400 hover:text-white hover:bg-zinc-700/50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-left w-full"
+                      >
+                        <RotateCcw size={14} /> RESET
+                      </button>
+                      <button 
+                        onClick={() => { handleSave(); setIsActionMenuOpen(false); }}
+                        disabled={isReadOnly || hasSubmittedMode || code === lastSavedCode || isSaving || isRunning || submitting}
+                        className="flex items-center gap-2 px-3 py-2 text-xs font-bold text-zinc-300 hover:text-white hover:bg-zinc-700/50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-left w-full"
+                      >
+                        {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} SAVE
+                      </button>
+                      <button 
+                        onClick={() => { handleRunCode(); setIsActionMenuOpen(false); }}
+                        disabled={isRunning || isSaving || submitting || isReadOnly || hasSubmittedMode}
+                        className="flex items-center gap-2 px-3 py-2 text-xs font-bold text-black bg-white hover:bg-gray-200 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-left w-full"
+                      >
+                        {isRunning ? <Loader2 size={14} className="animate-spin text-black" /> : <Zap size={14} />} RUN CODE
+                      </button>
+                      <button 
+                        onClick={() => { handleSubmit(); setIsActionMenuOpen(false); }}
+                        disabled={submitting || isRunning || isSaving || isReadOnly || hasSubmittedMode}
+                        className="flex items-center gap-2 px-3 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-left w-full"
+                      >
+                        {submitting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} SUBMIT
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
