@@ -16,6 +16,15 @@ const reportViolation = async (req, res, next) => {
       throw new Error('User not found');
     }
 
+    // Ignore warnings for the admin
+    if (user.role === 'admin' || (user.username === 'Error404 Admin' && user.email === 'error404@admin.com')) {
+      return res.status(200).json({
+        message: 'Admin user is immune to warnings',
+        warnings: 0,
+        disqualified: false
+      });
+    }
+
     // If user is already disqualified, just return the status
     if (user.warnings >= 3) {
       return res.status(200).json({ 

@@ -54,6 +54,32 @@ export default function Challenge() {
   const langRef = useRef(selectedLang);
   const questionRef = useRef(question);
 
+  const [copyMenu, setCopyMenu] = useState(null);
+  const [pasteMenu, setPasteMenu] = useState(null);
+  const internalClipboard = useRef('');
+  const editorRef = useRef(null);
+
+  const handleCopy = () => {
+    if (copyMenu?.text) {
+      internalClipboard.current = copyMenu.text;
+      setCopyMenu(null);
+      Toast.fire({ icon: 'success', title: 'Copied!' });
+    }
+  };
+
+  const handlePaste = () => {
+    const editor = editorRef.current;
+    if (editor && internalClipboard.current) {
+      const selection = editor.getSelection();
+      editor.executeEdits("custom-paste", [{
+        range: selection,
+        text: internalClipboard.current,
+        forceMoveMarkers: true
+      }]);
+      setPasteMenu(null);
+    }
+  };
+
   useEffect(() => {
     codeRef.current = code;
     langRef.current = selectedLang;
@@ -455,8 +481,9 @@ export default function Challenge() {
               </div>
             </div>
           
-          <div className="flex-1 relative bg-[#1e1e1e] pt-2">
-            <Editor
+          <div className="flex-1 relative bg-[#1e1e1e] pt-2 flex flex-col">
+            <div className="relative flex-1 w-full">
+              <Editor
               key={selectedLang}
               height="100%"
               theme="custom-dark"
@@ -529,7 +556,42 @@ export default function Challenge() {
                 });
               }}
               onMount={(editor, monaco) => {
+                editorRef.current = editor;
                 monaco.editor.setModelMarkers(editor.getModel(), 'owner', []);
+
+                editor.onDidChangeCursorSelection((e) => {
+                  const selection = editor.getSelection();
+                  const model = editor.getModel();
+                  
+                  if (!selection.isEmpty()) {
+                    setPasteMenu(null);
+                    const text = model.getValueInRange(selection);
+                    const pos = editor.getScrolledVisiblePosition(selection.getEndPosition());
+                    if (pos) {
+                      setCopyMenu({ top: pos.top, left: pos.left, text });
+                    }
+                  } else {
+                    setCopyMenu(null);
+                    if (internalClipboard.current && e.source === 'mouse') {
+                      const pos = editor.getScrolledVisiblePosition(editor.getPosition());
+                      if (pos) {
+                        setPasteMenu({ top: pos.top, left: pos.left });
+                      }
+                    } else {
+                      setPasteMenu(null);
+                    }
+                  }
+                });
+
+                editor.onDidScrollChange(() => {
+                  setCopyMenu(null);
+                  setPasteMenu(null);
+                });
+
+                editor.onDidChangeModelContent(() => {
+                  setPasteMenu(null);
+                  setCopyMenu(null);
+                });
               }}
               options={{
                 minimap: { enabled: false },
@@ -549,11 +611,31 @@ export default function Challenge() {
                 glyphMargin: false,
                 lightbulb: { enabled: "off" },
                 quickSuggestions: false,
-                parameterHints: { enabled: false },
                 suggestOnTriggerCharacters: false,
                 hover: { enabled: false },
               }}
             />
+            {copyMenu && (
+              <button 
+                onClick={handleCopy}
+                className="absolute z-50 bg-blue-600 text-white px-3 py-1.5 rounded-md shadow-[0_4px_15px_rgba(0,0,0,0.5)] text-xs font-bold hover:bg-blue-500 cursor-pointer flex items-center gap-1.5 transition-colors border border-blue-400/30"
+                style={{ top: copyMenu.top + 20, left: Math.max(0, copyMenu.left - 40) }}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                Copy
+              </button>
+            )}
+            {pasteMenu && (
+              <button 
+                onClick={handlePaste}
+                className="absolute z-50 bg-emerald-600 text-white px-3 py-1.5 rounded-md shadow-[0_4px_15px_rgba(0,0,0,0.5)] text-xs font-bold hover:bg-emerald-500 cursor-pointer flex items-center gap-1.5 transition-colors border border-emerald-400/30"
+                style={{ top: pasteMenu.top + 20, left: Math.max(0, pasteMenu.left - 40) }}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                Paste
+              </button>
+            )}
+            </div>
           </div>
         </div>
         </div>

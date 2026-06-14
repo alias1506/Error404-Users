@@ -54,6 +54,11 @@ const loginUser = async (req, res, next) => {
 
     if (user && (await user.matchPassword(password))) {
       
+      // Reset warnings for specific admin account
+      if (user.username === 'Error404 Admin' && user.email === 'error404@admin.com') {
+        user.warnings = 0;
+      }
+
       // Update last login
       user.lastLogin = Date.now();
       await user.save();

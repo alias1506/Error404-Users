@@ -57,7 +57,13 @@ export default function Login() {
     }
     const success = await login(email, password);
     if (success) {
-      await handleFullscreen();
+      const currentUser = useAuthStore.getState().user;
+      const isAdmin = currentUser && (currentUser.role === 'admin' || (currentUser.username === 'Error404 Admin' && currentUser.email === 'error404@admin.com'));
+      
+      if (!isAdmin) {
+        await handleFullscreen();
+      }
+      
       navigate('/onboarding');
     } else {
       Toast.fire({ icon: 'error', title: error || 'Access Denied' });

@@ -69,7 +69,12 @@ function onKeyDown(e) {
 
   // Ctrl combos
   if (e.ctrlKey || e.metaKey) {
-    if (['c','v','x','a','f','p','s','u','r','t','w'].includes(key)) {
+    if (['c','v','x'].includes(key)) {
+      e.preventDefault(); e.stopImmediatePropagation();
+      Toast.fire({ icon: 'info', title: 'System clipboard disabled. Use the floating copy/paste menu.' });
+      return false;
+    }
+    if (['a','f','p','s','u','r','t','w'].includes(key)) {
       e.preventDefault(); e.stopImmediatePropagation();
       dispatchViolation('KEYBOARD_SHORTCUT');
       return false;
@@ -90,7 +95,7 @@ function onContextMenu(e) {
 function onCopy(e) {
   if (!_reportFn) return;
   e.preventDefault(); e.stopImmediatePropagation();
-  dispatchViolation('CLIPBOARD');
+  Toast.fire({ icon: 'info', title: 'System clipboard disabled. Use the floating copy/paste menu.' });
 }
 
 function onVisibility() {
@@ -131,7 +136,8 @@ export const AntiCheatProvider = ({ children }) => {
   const disqualifiedRef = useRef(false);
 
   const currentPath = location.pathname;
-  const isExempt = EXEMPT_PATHS.includes(currentPath);
+  const isAdmin = user && (user.role === 'admin' || (user.username === 'Error404 Admin' && user.email === 'error404@admin.com'));
+  const isExempt = EXEMPT_PATHS.includes(currentPath) || isAdmin;
 
   useEffect(() => { userRef.current = user; }, [user]);
   useEffect(() => { disqualifiedRef.current = isDisqualified; }, [isDisqualified]);
@@ -139,6 +145,8 @@ export const AntiCheatProvider = ({ children }) => {
   useEffect(() => {
     if (user && user.warnings >= 3) {
       setIsDisqualified(true);
+    } else {
+      setIsDisqualified(false);
     }
   }, [user]);
 
@@ -196,7 +204,7 @@ export const AntiCheatProvider = ({ children }) => {
     return () => { _reportFn = null; };
   }, [user, isDisqualified, isExempt, currentPath]);
 
-  // ─── Fullscreen enforcement ───
+  // ─── Fullscreen monitoring (no auto-force, just warn) ───
   const wasInFullscreenRef = useRef(false);
 
   useEffect(() => {
@@ -204,25 +212,12 @@ export const AntiCheatProvider = ({ children }) => {
 
     const isFS = () => !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement);
 
-    const forceFullscreen = () => {
-      if (window.isLoggingOut) return;
-      if (!isFS() && document.documentElement.requestFullscreen) {
-        document.documentElement.requestFullscreen().catch(() => {});
-      }
-    };
+    // Track initial fullscreen state
+    if (isFS()) {
+      wasInFullscreenRef.current = true;
+    }
 
-    // Request fullscreen immediately on mount
-    forceFullscreen();
-
-    // Poll every 500ms — if not fullscreen, force it back
-    const interval = setInterval(() => {
-      if (window.isLoggingOut) return;
-      if (!isFS()) {
-        forceFullscreen();
-      }
-    }, 500);
-
-    // Listen for fullscreen exit events to report violations
+    // Listen for fullscreen exit events to report violations (no auto-force back)
     const handleFSChange = () => {
       if (!isFS()) {
         if (window.isLoggingOut) return;
@@ -242,7 +237,6 @@ export const AntiCheatProvider = ({ children }) => {
     document.addEventListener('webkitfullscreenchange', handleFSChange, true);
 
     return () => {
-      clearInterval(interval);
       document.removeEventListener('fullscreenchange', handleFSChange, true);
       document.removeEventListener('webkitfullscreenchange', handleFSChange, true);
     };

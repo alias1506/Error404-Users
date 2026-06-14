@@ -164,6 +164,8 @@ export default function Navbar() {
   };
 
 
+  const isAdmin = user && (user.role === 'admin' || (user.username === 'Error404 Admin' && user.email === 'error404@admin.com'));
+
   return (
     <nav className="glass-panel sticky top-0 z-50 px-6 py-4 flex justify-between items-center border-b border-zinc-800">
       <Link to="/dashboard" className="flex items-center gap-2">
@@ -171,24 +173,28 @@ export default function Navbar() {
         <span className="font-bold tracking-widest text-xl text-white">ERROR<span className="text-gray-400">404</span></span>
       </Link>
       <div className="flex items-center gap-2 md:gap-6">
-        <div className={`flex items-center gap-2 px-3 py-2 font-mono text-sm rounded-lg transition-colors ${
-          (user?.warnings || 0) === 0 ? 'text-emerald-500' :
-          (user?.warnings || 0) === 1 ? 'text-yellow-500' :
-          (user?.warnings || 0) === 2 ? 'text-orange-500' :
-          'text-red-500 bg-red-500/10 border border-red-500/30'
-        }`}>
-          <AlertTriangle size={16} />
-          {(user?.warnings || 0) >= 3 ? (
-             <span className="font-bold tracking-widest">DISQUALIFIED</span>
-          ) : (
-            <>
-              <span className="font-bold hidden sm:inline">WARNINGS: {user?.warnings || 0}/3</span>
-              <span className="font-bold sm:hidden">{user?.warnings || 0}/3</span>
-            </>
-          )}
-        </div>
+        {!isAdmin && (
+          <>
+            <div className={`flex items-center gap-2 px-3 py-2 font-mono text-sm rounded-lg transition-colors ${
+              (user?.warnings || 0) === 0 ? 'text-emerald-500' :
+              (user?.warnings || 0) === 1 ? 'text-yellow-500' :
+              (user?.warnings || 0) === 2 ? 'text-orange-500' :
+              'text-red-500 bg-red-500/10 border border-red-500/30'
+            }`}>
+              <AlertTriangle size={16} />
+              {(user?.warnings || 0) >= 3 ? (
+                 <span className="font-bold tracking-widest">DISQUALIFIED</span>
+              ) : (
+                <>
+                  <span className="font-bold hidden sm:inline">WARNINGS: {user?.warnings || 0}/3</span>
+                  <span className="font-bold sm:hidden">{user?.warnings || 0}/3</span>
+                </>
+              )}
+            </div>
 
-        <div className="hidden sm:block h-6 w-px bg-zinc-800" />
+            <div className="hidden sm:block h-6 w-px bg-zinc-800" />
+          </>
+        )}
 
         <div 
           className="flex items-center gap-2 px-3 py-2 font-mono text-sm transition-colors duration-1000"
