@@ -14,6 +14,7 @@ export default function Dashboard() {
   const [rounds, setRounds] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isStartingRound, setIsStartingRound] = useState(false);
   const { isDisqualified } = useAntiCheat();
 
   const fetchDashboardData = async (isInitial = false) => {
@@ -44,12 +45,15 @@ export default function Dashboard() {
 
   const handleStartRound = async (roundId) => {
     try {
+      setIsStartingRound(true);
       setTimeExpired(false);
       await api.post(`/rounds/${roundId}/start`);
       await fetchDashboardData();
       window.dispatchEvent(new Event('round-started'));
     } catch (err) {
       console.error('Failed to start round', err);
+    } finally {
+      setIsStartingRound(false);
     }
   };
 
@@ -322,9 +326,17 @@ export default function Dashboard() {
                   
                   <button 
                     onClick={() => handleStartRound(activeRound._id)}
-                    className="px-8 py-3 bg-white text-black font-bold font-mono rounded hover:bg-gray-200 transition-colors tracking-widest text-lg"
+                    disabled={isStartingRound}
+                    className="px-8 py-3 bg-white text-black font-bold font-mono rounded hover:bg-gray-200 transition-colors tracking-widest text-lg flex items-center justify-center gap-3 disabled:opacity-80 disabled:cursor-not-allowed"
                   >
-                    START CHALLENGE
+                    {isStartingRound ? (
+                      <>
+                        <Loader2 size={24} className="animate-spin text-black" />
+                        STARTING CHALLENGE...
+                      </>
+                    ) : (
+                      "START CHALLENGE"
+                    )}
                   </button>
                 </div>
               </div>

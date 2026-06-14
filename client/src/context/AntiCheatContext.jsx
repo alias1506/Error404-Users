@@ -26,11 +26,17 @@ const Toast = Swal.mixin({
 
 // ─── Module-level state (survives React re-renders) ───
 let _reportFn = null;         // set when anti-cheat is active
+let _lastViolationTime = 0;
 
 function dispatchViolation(type) {
   if (window.isLoggingOut) return;
   
   if (!_reportFn) return;
+
+  const now = Date.now();
+  if (now - _lastViolationTime < 1000) return; // Prevent double-trigger spam within 1 second
+  _lastViolationTime = now;
+
   _reportFn(type);
 }
 
@@ -39,6 +45,11 @@ function onKeyDown(e) {
   if (!_reportFn) return;
 
   const key = e.key ? e.key.toLowerCase() : '';
+
+  // Escape always triggers violation immediately
+  if (key === 'escape') {
+    dispatchViolation('FULLSCREEN_EXIT');
+  }
 
   // F12
   if (e.key === 'F12') {
@@ -217,28 +228,32 @@ export const AntiCheatProvider = ({ children }) => {
       wasInFullscreenRef.current = true;
     }
 
-    // Listen for fullscreen exit events to report violations (no auto-force back)
-    const handleFSChange = () => {
-      if (!isFS()) {
-        if (window.isLoggingOut) return;
-
-        // Only report violation if user was previously in fullscreen (real ESC press)
-        if (wasInFullscreenRef.current) {
-          dispatchViolation('FULLSCREEN_EXIT');
-        }
+    // Realtime check function
+    const checkFS = () => {
+      if (window.isLoggingOut) return;
+      const currentFS = isFS();
+      
+      if (!currentFS && wasInFullscreenRef.current) {
+        // Only report violation if user was previously in fullscreen
+        dispatchViolation('FULLSCREEN_EXIT');
         wasInFullscreenRef.current = false;
-      } else {
+      } else if (currentFS && !wasInFullscreenRef.current) {
         // Mark that we are now in fullscreen
         wasInFullscreenRef.current = true;
       }
     };
 
-    document.addEventListener('fullscreenchange', handleFSChange, true);
-    document.addEventListener('webkitfullscreenchange', handleFSChange, true);
+    // Fast polling for absolute realtime detection (fixes event delays)
+    const interval = setInterval(checkFS, 200);
+
+    // Keep events as backup
+    document.addEventListener('fullscreenchange', checkFS, true);
+    document.addEventListener('webkitfullscreenchange', checkFS, true);
 
     return () => {
-      document.removeEventListener('fullscreenchange', handleFSChange, true);
-      document.removeEventListener('webkitfullscreenchange', handleFSChange, true);
+      clearInterval(interval);
+      document.removeEventListener('fullscreenchange', checkFS, true);
+      document.removeEventListener('webkitfullscreenchange', checkFS, true);
     };
   }, [user, isDisqualified, isExempt, currentPath]);
 
